@@ -226,7 +226,8 @@ class MaskedPenalizedSparseCategoricalCrossentropy:
     def __init__(self, penalty_weight: float):
         self.penalty_weight = penalty_weight
 
-    def __call__(self, y_true, y_pred):
+    def __call__(self, y_true, y_pred, sample_weight):
+        
         y_true_val = y_true[:, :, 0]
         mask = y_true[:, :, 1]
 
