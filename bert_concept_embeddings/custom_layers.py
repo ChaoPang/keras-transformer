@@ -83,7 +83,6 @@ def scaled_dot_product_attention(q, k, v, mask, time_attention_logits=None):
 class MultiHeadAttention(tf.keras.layers.Layer):
 
     def __init__(self, d_model, num_heads, **kwargs):
-
         super(MultiHeadAttention, self).__init__(**kwargs)
 
         self.num_heads = num_heads
@@ -135,7 +134,6 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
 class EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, **kwargs):
-
         super(EncoderLayer, self).__init__(**kwargs)
 
         self.mha = MultiHeadAttention(d_model, num_heads)
@@ -148,7 +146,6 @@ class EncoderLayer(tf.keras.layers.Layer):
         self.dropout2 = tf.keras.layers.Dropout(rate)
 
     def call(self, x, mask, time_attention_logits):
-
         attn_output, _ = self.mha(x, x, x, mask, time_attention_logits)  # (batch_size, input_seq_len, d_model)
         attn_output = self.dropout1(attn_output)
         out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, d_model)
@@ -171,13 +168,23 @@ class TimeAttention(tf.keras.layers.Layer):
 
     def call(self, batch_concept_sequence, batch_time_sequence, mask):
 
+        # shape = (batch_size, seq_length, seq_len)
         concept_time_embeddings = self.embedding_layer(batch_concept_sequence)
+
+        # shape = (batch_size, seq_length, seq_length)
         a = tf.tile(tf.expand_dims(batch_time_sequence, axis=-1), tf.constant([1, 1, self.seq_len]))
+
+        # shape = (batch_size, seq_length, seq_length)
         b = tf.linalg.matrix_transpose(
             tf.tile(tf.expand_dims(batch_time_sequence, axis=-1), tf.constant([1, 1, self.seq_len])))
+
+        # shape = (batch_size, seq_length, seq_length)
         pairwise_time_delta = b - a
+
+        # shape = (batch_size, seq_length, seq_length)
         pairwise_time_delta = self.normalization_layer(tf.cast(pairwise_time_delta, dtype='float32'))
 
+        # shape = (batch_size, seq_length, seq_length)
         next_input = tf.matmul(concept_time_embeddings, pairwise_time_delta)
 
         # add the mask to the scaled tensor.
@@ -187,52 +194,8 @@ class TimeAttention(tf.keras.layers.Layer):
         return tf.expand_dims(next_input, axis=1)
 
 
-class Encoder(tf.keras.layers.Layer):
-    def __init__(self,
-                 num_layers,
-                 d_model,
-                 num_heads,
-                 dff,
-                 vocab_size,
-                 seq_len,
-                 maximum_position_encoding, rate=0.1):
-        super(Encoder, self).__init__()
-
-        self.d_model = d_model
-        self.num_layers = num_layers
-        self.time_attention = TimeAttention(vocab_size, seq_len)
-        self.embedding = tf.keras.layers.Embedding(vocab_size, d_model)
-        self.pos_encoding = positional_encoding(maximum_position_encoding,
-                                                self.d_model)
-
-        self.enc_layers = [EncoderLayer(d_model, num_heads, dff, rate)
-                           for _ in range(num_layers)]
-
-        self.dropout = tf.keras.layers.Dropout(rate)
-
-    def call(self, inputs, training, mask):
-        time_attention_logits = self.time_attention(inputs, mask)
-
-        x, _ = inputs
-
-        seq_len = tf.shape(x)[1]
-
-        # adding embedding and position encoding.
-        x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
-        x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
-        x += self.pos_encoding[:, :seq_len, :]
-
-        x = self.dropout(x, training=training)
-
-        for i in range(self.num_layers):
-            x = self.enc_layers[i](x, training, mask, time_attention_logits)
-
-        return x  # (batch_size, input_seq_len, d_model)
-
-
 get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'EncoderLayer': EncoderLayer,
-    'TimeAttention': TimeAttention,
-    'Encoder': Encoder
+    'TimeAttention': TimeAttention
 })
