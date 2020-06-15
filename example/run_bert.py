@@ -13,11 +13,11 @@ from keras_transformer.bert import (
     BatchGeneratorForBERT, masked_perplexity,
     MaskedPenalizedSparseCategoricalCrossentropy)
 
-from . import wikitext
-from .bpe import BPEEncoder
-from .utils import (
+from example import wikitext
+from example.bpe import BPEEncoder
+from example.utils import (
     load_optimizer_weights, contain_tf_gpu_mem_usage, CosineLRSchedule)
-from .models import transformer_bert_model
+from example.models import transformer_bert_model
 
 BERT_SPECIAL_TOKENS = ['[SEP]', '[CLS]', '[MASK]']
 

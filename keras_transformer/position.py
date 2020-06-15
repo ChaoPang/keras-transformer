@@ -1,7 +1,7 @@
+import tensorflow as tf
 import numpy as np
 # noinspection PyPep8Naming
 from keras import backend as K
-from keras.engine import Layer
 from keras.utils import get_custom_objects
 
 
@@ -32,7 +32,7 @@ def positional_signal(hidden_size: int, length: int,
     return K.expand_dims(signal, axis=0)
 
 
-class AddPositionalEncoding(Layer):
+class AddPositionalEncoding(tf.keras.layers.Layer):
     """
     Injects positional encoding signal described in section 3.5 of the original
     paper "Attention is all you need". Also a base class for more complex
@@ -83,7 +83,7 @@ class AddCoordinateEncoding(AddPositionalEncoding):
         return pos_encoded_added + step_signal
 
 
-class TransformerCoordinateEmbedding(Layer):
+class TransformerCoordinateEmbedding(tf.keras.layers.Layer):
     """
     Represents trainable positional embeddings for the Transformer model:
 

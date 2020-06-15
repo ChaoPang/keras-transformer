@@ -11,6 +11,7 @@ class _BaseMultiHeadAttention(Layer):
     Self-attention and its more general form used in decoders (the one which
     takes values and keys from the encoder).
     """
+
     def __init__(self, num_heads: int, use_masking: bool,
                  dropout: float = 0.0,
                  compression_window_size: int = None,
@@ -208,13 +209,13 @@ class _BaseMultiHeadAttention(Layer):
         last_dims = K.int_shape(dot_product)[-2:]
         low_triangle_ones = (
             np.tril(np.ones(last_dims))
-            # to ensure proper broadcasting
-            .reshape((1,) + last_dims))
+                # to ensure proper broadcasting
+                .reshape((1,) + last_dims))
         inverse_low_triangle = 1 - low_triangle_ones
         close_to_negative_inf = -1e9
         result = (
-            K.constant(low_triangle_ones, dtype=K.floatx()) * dot_product +
-            K.constant(close_to_negative_inf * inverse_low_triangle))
+                K.constant(low_triangle_ones, dtype=K.floatx()) * dot_product +
+                K.constant(close_to_negative_inf * inverse_low_triangle))
         return result
 
 
@@ -328,38 +329,6 @@ class MultiHeadSelfAttention(_BaseMultiHeadAttention):
 
     def compute_output_shape(self, input_shape):
         return input_shape
-
-
-class TimeAttention(Layer):
-    
-    def __init__(self, vocab_size: int, seq_len: int):
-        super().__init__()
-        
-        self.seq_len = seq_len
-        self.embedding_layer = Embedding(vocab_size, seq_len)
-        self.normalization_layer = LayerNormalization()
-        self.softmax_layer = Softmax(axis=-1)
-        
-    def call(self, inputs, mask, **kwargs):
-        
-        batch_concept_sequence, batch_time_sequence = inputs
-        
-        concept_time_embeddings = self.embedding_layer(batch_concept_sequence)
-        
-        a = tf.tile(tf.expand_dims(batch_time_sequence, axis=-1), tf.constant([1, 1, self.seq_len]))
-        b = tf.linalg.matrix_transpose(tf.tile(tf.expand_dims(test_batch, axis=-1), tf.constant([1, 1, self.seq_len])))
-        pairwise_time_delta = b - a
-        pairwise_time_delta = normalization_layer(tf.cast(pairwise_time_delta, dtype='float32'))
-        
-        next_input = tf.matmul(concept_time_embeddings, pairwise_time_delta)
-        
-        # add the mask to the scaled tensor.
-        if mask is not None:
-            next_input += (tf.cast(mask, dtype='float32') * -1e9)  
-        
-        time_attention = self.softmax_layer(next_input)
-        
-        return time_attention
 
 
 get_custom_objects().update({

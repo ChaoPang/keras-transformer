@@ -3,24 +3,26 @@ Tools that are not necessary for the Transformer by itself, but might be
 useful in building models with it.
 """
 import math
+import tensorflow as tf
 
 from keras import activations, regularizers
 # noinspection PyPep8Naming
 from keras import backend as K
-from keras.engine import Layer
-from keras.layers import Embedding
+
+# from keras.engine import Layer
+# from keras.layers import Embedding
 from keras.utils import get_custom_objects
 
 
-class ReusableEmbedding(Embedding):
+class ReusableEmbedding(tf.keras.layers.Embedding):
     """
     A "reusable" form of the Embedding layer, which returns its
     full embedding matrix as one of the outputs.
     This is necessary to guarantee correct work of Keras when the matrix
     is being re-used again in TiedOutputEmbedding layer.
     """
-    def call(self, inputs, **kwargs):
-        result = super().call(inputs, **kwargs)
+    def call(self, inputs):
+        result = super().call(inputs)
         return [result, self.embeddings]
 
     def compute_output_shape(self, input_shape):
@@ -31,7 +33,7 @@ class ReusableEmbedding(Embedding):
         return [super().compute_mask(inputs, mask), None]
 
 
-class TiedOutputEmbedding(Layer):
+class TiedOutputEmbedding(tf.keras.layers.Layer):
     """
     Allows to reuse the same word embedding matrix both for the input and
     the output layers of the network.

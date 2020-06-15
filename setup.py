@@ -30,7 +30,7 @@ setup(
     keywords='development',
 
     packages=find_packages(where='.', exclude=['example']),
-    install_requires=['Keras>=2.0.8', 'numpy'],
+    install_requires=['Keras>=2.0.8', 'numpy', 'tqdm', 'tensorflow'],
     tests_require=['pytest'],
     include_package_data=True,
 )
