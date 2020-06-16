@@ -15,28 +15,28 @@ BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
 
 
 class ConceptTokenizer:
-    
+
     def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='0'):
         self.special_tokens = special_tokens
         self.tokenzier = Tokenizer(oov_token=oov_token, filters='', lower=False)
-        
+
     def fit_on_concept_sequences(self, concept_sequences):
         self.tokenzier.fit_on_texts(concept_sequences)
         if self.special_tokens is not None:
             self.tokenzier.fit_on_texts(self.special_tokens)
-        
+
     def encode(self, concept_sequences):
         return self.tokenzier.texts_to_sequences(concept_sequences)
-    
+
     def decode(self, concept_sequence_token_ids):
         return self.tokenzier.sequences_to_texts(concept_sequence_token_ids)
-    
+
     def get_first_token_index(self):
         return min(list(self.tokenzier.index_word.keys()))
-    
+
     def get_last_token_index(self):
         return max(list(self.tokenzier.index_word.keys()))
-    
+
     def get_vocab_size(self):
         return len(self.tokenzier.index_word)
 
@@ -52,16 +52,16 @@ class BatchGeneratorVisitBased:
                  mask_token_id: int,
                  unused_token_id: int,
                  max_sequence_length: int,
-                 batch_size: int, 
-                 first_normal_token_id:int, 
-                 last_normal_token_id:int):
-        
+                 batch_size: int,
+                 first_normal_token_id: int,
+                 last_normal_token_id: int):
+
         self.concept_sequences = concept_sequences
         self.data_size = len(concept_sequences)
         self.steps_per_epoch = (
             # We sample the dataset randomly. So we can make only a crude
             # estimation of how many steps it should take to cover most of it.
-            self.data_size // batch_size)
+                self.data_size // batch_size)
         self.batch_size = batch_size
         self.max_sequence_length = max_sequence_length
         self.mask_token_id = mask_token_id
@@ -99,19 +99,19 @@ class BatchGeneratorVisitBased:
                the "sentence A", and 0s otherwise.
         """
         while True:
-            
+
             if self.index >= self.data_size:
                 self.index = 0
-            
+
             concept_sequence_batch = islice(self.concept_sequences, self.index, self.index + self.batch_size)
             self.index += self.batch_size
-            
+
             next_bunch_of_samples = self.generate_samples(concept_sequence_batch)
-            
+
             mask, sequence, masked_sequence = zip(*list(next_bunch_of_samples))
-            
+
             combined_label = np.stack([sequence, mask], axis=-1)
-            
+
             yield (
                 [np.array(masked_sequence)],
                 [combined_label]
@@ -123,13 +123,13 @@ class BatchGeneratorVisitBased:
         by `generate_batches()`.
         """
         results = []
-        
-        for sequence in concept_sequence_batch:   
+
+        for sequence in concept_sequence_batch:
             masked_sequence = sequence.copy()
             output_mask = np.zeros((len(sequence),), dtype=int)
 
             for word_pos in range(0, len(sequence)):
-                
+
                 if sequence[word_pos] == self.unused_token_id:
                     break
                 if random.random() < 0.15:
@@ -142,7 +142,56 @@ class BatchGeneratorVisitBased:
                     # else: 10% of the time we just leave the word as is
                     output_mask[word_pos] = 1
             results.append((output_mask, sequence, masked_sequence))
-        
+
         return results
 
 
+class BatchGenerator:
+    """
+    This class generates batches for a BERT-based language model
+    in an abstract way, by using an external function sampling
+    sequences of token IDs of a given length.
+    """
+
+    def __init__(self, patient_event_sequence,
+                 mask_token_id: int,
+                 unused_token_id: int,
+                 max_sequence_length: int,
+                 batch_size: int,
+                 first_normal_token_id: int,
+                 last_normal_token_id: int):
+
+        self.patient_event_sequence = patient_event_sequence
+        self.data_size = len(patient_event_sequence)
+        self.steps_per_epoch = (self.data_size // batch_size)
+        self.batch_size = batch_size
+        self.max_sequence_length = max_sequence_length
+        self.mask_token_id = mask_token_id
+        self.unused_token_id = unused_token_id
+        self.first_token_id = first_normal_token_id
+        self.last_token_id = last_normal_token_id
+        self.index = 0
+
+    def generate_batches(self):
+        examples = self.generate_examples()
+        while True:
+            next_bunch_of_examples = islice(examples, self.batch_size)
+            target_concepts, target_time_stamps, context_concepts, context_time_stamps = zip(
+                *list(next_bunch_of_examples))
+            yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps)
+
+    def generate_examples(self):
+        half_window_size = int(self.max_sequence_length / 2)
+        while True:
+            for tup in self.patient_event_sequence.itertuples():
+                concept_ids = tup.concept_ids
+                dates = tup.dates
+                for i, concept_id in enumerate(concept_ids):
+                    left_index = i - half_window_size if i - half_window_size > 0 else 0
+                    right_index = i + 1 + half_window_size
+                    target_concepts = [concept_id]
+                    target_time_stamps = [dates[i]]
+                    context_concepts = concept_ids[left_index: i] + concept_ids[i + 1: right_index]
+                    context_time_stamps = dates[left_index: i] + dates[i + 1: right_index]
+
+                    yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps)
