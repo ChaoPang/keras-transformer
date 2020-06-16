@@ -10,6 +10,7 @@ from keras.utils import get_custom_objects
 # -
 
 from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
 
 BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
 
@@ -154,23 +155,16 @@ class BatchGenerator:
     """
 
     def __init__(self, patient_event_sequence,
-                 mask_token_id: int,
                  unused_token_id: int,
                  max_sequence_length: int,
-                 batch_size: int,
-                 first_normal_token_id: int,
-                 last_normal_token_id: int):
+                 batch_size: int):
 
         self.patient_event_sequence = patient_event_sequence
-        self.data_size = len(patient_event_sequence)
+        self.data_size = len(patient_event_sequence.concept_ids.explode())
         self.steps_per_epoch = (self.data_size // batch_size)
         self.batch_size = batch_size
         self.max_sequence_length = max_sequence_length
-        self.mask_token_id = mask_token_id
         self.unused_token_id = unused_token_id
-        self.first_token_id = first_normal_token_id
-        self.last_token_id = last_normal_token_id
-        self.index = 0
 
     def generate_batches(self):
         examples = self.generate_examples()
@@ -178,14 +172,30 @@ class BatchGenerator:
             next_bunch_of_examples = islice(examples, self.batch_size)
             target_concepts, target_time_stamps, context_concepts, context_time_stamps = zip(
                 *list(next_bunch_of_examples))
-            yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps)
+            
+            target_concepts = np.asarray(target_concepts)
+            target_time_stamps = np.asarray(target_time_stamps)
+            context_concepts = pad_sequences(context_concepts, maxlen=self.max_sequence_length, padding='post', value=self.unused_token_id)
+            context_time_stamps = pad_sequences(context_time_stamps, maxlen=self.max_sequence_length, padding='post', value=0, dtype='float32')
+            mask = (context_concepts == self.unused_token_id).astype(int)
+              
+            yield ({'target_concepts':target_concepts, 
+                   'target_time_stamps': target_time_stamps, 
+                   'context_concepts': context_concepts, 
+                   'context_time_stamps': context_time_stamps, 
+                   'mask': mask}, target_concepts)
+#             yield ([np.asarray(target_concepts), 
+#                     np.asarray(target_time_stamps), 
+#                     context_concepts, 
+#                     context_time_stamps, 
+#                     mask], np.asarray(target_concepts))
 
     def generate_examples(self):
         half_window_size = int(self.max_sequence_length / 2)
         while True:
             for tup in self.patient_event_sequence.itertuples():
-                concept_ids = tup.concept_ids
-                dates = tup.dates
+                concept_ids = tup.token_ids
+                dates = tup.normalized_dates
                 for i, concept_id in enumerate(concept_ids):
                     left_index = i - half_window_size if i - half_window_size > 0 else 0
                     right_index = i + 1 + half_window_size
@@ -195,3 +205,5 @@ class BatchGenerator:
                     context_time_stamps = dates[left_index: i] + dates[i + 1: right_index]
 
                     yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps)
+
+
