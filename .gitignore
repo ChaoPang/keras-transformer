@@ -5,3 +5,9 @@ dist/
 .pytest_cache/
 .DS_Store
 tensorboard_log/
+
+*ipynb_checkpoints/
+*h5
+*logs
+*nohup.out
+*ipynb
