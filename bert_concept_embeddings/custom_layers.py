@@ -163,7 +163,7 @@ class TimeAttention(tf.keras.layers.Layer):
                  **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = vocab_size,
+        self.vocab_size = vocab_size
         self.target_seq_len = target_seq_len
         self.context_seq_len = context_seq_len
         self.return_logits = return_logits
@@ -188,9 +188,6 @@ class TimeAttention(tf.keras.layers.Layer):
         :param kwargs:
         :return:
         """
-
-        assert len(inputs) == 4
-
         target_concepts = inputs[0]
         target_time_stamps = inputs[1]
         context_time_stamps = inputs[2]
@@ -240,8 +237,6 @@ class TimeSelfAttention(TimeAttention):
         :param kwargs:
         :return:
         """
-        assert len(inputs) == 3
-
         batch_concept_sequence = inputs[0]
         batch_time_sequence = inputs[1]
         mask = inputs[2]
