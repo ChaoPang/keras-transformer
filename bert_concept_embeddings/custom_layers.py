@@ -159,43 +159,84 @@ class EncoderLayer(tf.keras.layers.Layer):
 
 class TimeAttention(tf.keras.layers.Layer):
 
-    def __init__(self, vocab_size: int, seq_len: int):
+    def __init__(self, vocab_size: int, target_seq_len: int, context_seq_len: int, return_logits: bool = False):
         super().__init__()
 
-        self.seq_len = seq_len
-        self.embedding_layer = tf.keras.layers.Embedding(vocab_size, seq_len)
+        self.vocab_size = vocab_size,
+        self.target_seq_len = target_seq_len
+        self.context_seq_len = context_seq_len
+        self.return_logits = return_logits
+
+        self.embedding_layer = tf.keras.layers.Embedding(vocab_size, context_seq_len)
         self.normalization_layer = tf.keras.layers.LayerNormalization()
+        self.elementwise_layer = tf.keras.layers.Multiply()
+        self.softmax_layer = tf.keras.layers.Softmax()
 
-    def call(self, batch_concept_sequence, batch_time_sequence, mask):
+    def call(self, target_concepts, context_concepts, target_time_stamps, context_time_stamps, time_mask):
+        """
 
-        # shape = (batch_size, seq_length, seq_len)
-        concept_time_embeddings = self.embedding_layer(batch_concept_sequence)
+        :param target_concepts: (batch_size, target_sequence_length)
+        :param context_concepts:  (batch_size, context_sequence_length)
+        :param target_time_stamps: (batch_size, target_sequence_length)
+        :param context_time_stamps: (batch_size, context_sequence_length)
+        :param time_mask: (batch_size, context_sequence_length)
+        :return:
+        """
+        # shape = (batch_size, target_seq_length, context_seq_length)
+        concept_time_embeddings = self.embedding_layer(target_concepts)
 
-        # shape = (batch_size, seq_length, seq_length)
-        a = tf.tile(tf.expand_dims(batch_time_sequence, axis=-1), tf.constant([1, 1, self.seq_len]))
+        # shape = (batch_size, context_seq_length, target_seq_len)
+        multiplied_context_time_stamps = tf.tile(tf.expand_dims(context_time_stamps, axis=-1),
+                                                 tf.constant([1, 1, self.target_seq_len]))
 
-        # shape = (batch_size, seq_length, seq_length)
-        b = tf.linalg.matrix_transpose(
-            tf.tile(tf.expand_dims(batch_time_sequence, axis=-1), tf.constant([1, 1, self.seq_len])))
+        # shape = (batch_size, target_seq_length, context_seq_length)
+        time_delta = tf.transpose(tf.expand_dims(target_time_stamps, axis=1) - multiplied_context_time_stamps,
+                                  perm=[0, 2, 1])
 
-        # shape = (batch_size, seq_length, seq_length)
-        pairwise_time_delta = b - a
+        # shape = (batch_size, target_seq_length, context_seq_length)
+        time_delta = self.normalization_layer(tf.cast(time_delta, dtype='float32'))
 
-        # shape = (batch_size, seq_length, seq_length)
-        pairwise_time_delta = self.normalization_layer(tf.cast(pairwise_time_delta, dtype='float32'))
-
-        # shape = (batch_size, seq_length, seq_length)
-        next_input = tf.matmul(concept_time_embeddings, pairwise_time_delta)
+        # shape = (batch_size, target_seq_length, context_seq_length)
+        next_input = self.elementwise_layer([concept_time_embeddings, time_delta])
 
         # add the mask to the scaled tensor.
-        if mask is not None:
-            next_input += (tf.cast(mask, dtype='float32') * -1e9)
+        if time_mask is not None:
+            next_input += (tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
 
-        return tf.expand_dims(next_input, axis=1)
+        return next_input if self.return_logits else self.softmax_layer(next_input)
+
+
+class TimeSelfAttention(TimeAttention):
+
+    def __init__(self, vocab_size: int, seq_len: int, return_logits: bool = False):
+        """
+
+        :param vocab_size:
+        :param seq_len:
+        """
+        super().__init__(vocab_size=vocab_size,
+                         target_seq_len=seq_len,
+                         context_seq_len=seq_len,
+                         return_logits=return_logits)
+
+    def call(self, batch_concept_sequence, batch_time_sequence, mask):
+        """
+
+        :param batch_concept_sequence:
+        :param batch_time_sequence:
+        :param mask:
+        :return:
+        """
+        return super().call(target_concepts=batch_concept_sequence,
+                            context_concepts=batch_concept_sequence,
+                            target_time_stamps=batch_time_sequence,
+                            context_time_stamps=batch_time_sequence,
+                            time_mask=mask)
 
 
 get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'EncoderLayer': EncoderLayer,
-    'TimeAttention': TimeAttention
+    'TimeAttention': TimeAttention,
+    'PairwiseTimeAttention': TimeSelfAttention
 })
