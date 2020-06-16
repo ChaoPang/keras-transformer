@@ -49,11 +49,10 @@ def time_attention_model(max_seq_length: int,
     concept_embeddings = embedding_layer(context_concepts)
 
     # shape = (batch_size, 1, seq_len)
-    time_embeddings = time_embedding_layer(target_concepts=target_concepts,
-                                           context_concepts=context_concepts,
-                                           target_time_stamps=target_time_stamps,
-                                           context_time_stamps=context_time_stamps,
-                                           time_mask=mask)
+    time_embeddings = time_embedding_layer([target_concepts,
+                                            target_time_stamps,
+                                            context_time_stamps,
+                                            mask])
 
     # shape = (batch_size, 1, embedding_size)
     combined_embeddings = tf.matmul(time_embeddings, concept_embeddings)

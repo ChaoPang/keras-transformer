@@ -159,29 +159,43 @@ class EncoderLayer(tf.keras.layers.Layer):
 
 class TimeAttention(tf.keras.layers.Layer):
 
-    def __init__(self, vocab_size: int, target_seq_len: int, context_seq_len: int, return_logits: bool = False):
-        super().__init__()
+    def __init__(self, vocab_size: int, target_seq_len: int, context_seq_len: int, return_logits: bool = False,
+                 **kwargs):
+        super().__init__(**kwargs)
 
         self.vocab_size = vocab_size,
         self.target_seq_len = target_seq_len
         self.context_seq_len = context_seq_len
         self.return_logits = return_logits
 
-        self.embedding_layer = tf.keras.layers.Embedding(vocab_size, context_seq_len)
+        self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size, self.context_seq_len)
         self.normalization_layer = tf.keras.layers.LayerNormalization()
         self.elementwise_layer = tf.keras.layers.Multiply()
         self.softmax_layer = tf.keras.layers.Softmax()
 
-    def call(self, target_concepts, context_concepts, target_time_stamps, context_time_stamps, time_mask):
+    def get_config(self):
+        config = super().get_config()
+        config['vocab_size'] = self.vocab_size
+        config['target_seq_len'] = self.target_seq_len
+        config['context_seq_len'] = self.context_seq_len
+        config['return_logits'] = self.return_logits
+        return config
+
+    def call(self, inputs, **kwargs):
         """
 
-        :param target_concepts: (batch_size, target_sequence_length)
-        :param context_concepts:  (batch_size, context_sequence_length)
-        :param target_time_stamps: (batch_size, target_sequence_length)
-        :param context_time_stamps: (batch_size, context_sequence_length)
-        :param time_mask: (batch_size, context_sequence_length)
+        :param inputs:
+        :param kwargs:
         :return:
         """
+
+        assert len(inputs) == 4
+
+        target_concepts = inputs[0]
+        target_time_stamps = inputs[1]
+        context_time_stamps = inputs[2]
+        time_mask = inputs[3]
+
         # shape = (batch_size, target_seq_length, context_seq_length)
         concept_time_embeddings = self.embedding_layer(target_concepts)
 
@@ -208,7 +222,7 @@ class TimeAttention(tf.keras.layers.Layer):
 
 class TimeSelfAttention(TimeAttention):
 
-    def __init__(self, vocab_size: int, seq_len: int, return_logits: bool = False):
+    def __init__(self, vocab_size: int, seq_len: int, return_logits: bool = False, **kwargs):
         """
 
         :param vocab_size:
@@ -217,21 +231,22 @@ class TimeSelfAttention(TimeAttention):
         super().__init__(vocab_size=vocab_size,
                          target_seq_len=seq_len,
                          context_seq_len=seq_len,
-                         return_logits=return_logits)
+                         return_logits=return_logits, **kwargs)
 
-    def call(self, batch_concept_sequence, batch_time_sequence, mask):
+    def call(self, inputs, **kwargs):
         """
 
-        :param batch_concept_sequence:
-        :param batch_time_sequence:
-        :param mask:
+        :param inputs:
+        :param kwargs:
         :return:
         """
-        return super().call(target_concepts=batch_concept_sequence,
-                            context_concepts=batch_concept_sequence,
-                            target_time_stamps=batch_time_sequence,
-                            context_time_stamps=batch_time_sequence,
-                            time_mask=mask)
+        assert len(inputs) == 3
+
+        batch_concept_sequence = inputs[0]
+        batch_time_sequence = inputs[1]
+        mask = inputs[2]
+
+        return super().call([batch_concept_sequence, batch_time_sequence, batch_time_sequence, mask])
 
 
 get_custom_objects().update({
