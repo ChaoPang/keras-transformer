@@ -1,11 +1,6 @@
-# +
 import tensorflow as tf
 # +
 import tensorflow as tf
-
-# from keras import regularizers
-# from keras.models import Model
-# noinspection PyPep8Naming
 
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.position import TransformerCoordinateEmbedding
@@ -26,11 +21,11 @@ def time_attention_model(max_seq_length: int,
     :param concept_embedding_size:
     :return:
     """
-    target_concepts = tf.keras.layers.Input(shape=(1,), dtype='int32', name='target_concept_id')
+    target_concepts = tf.keras.layers.Input(shape=(1,), dtype='int32', name='target_concepts')
 
     target_time_stamps = tf.keras.layers.Input(shape=(1,), dtype='int32', name='target_time_stamps')
 
-    context_concepts = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='context_concept_ids')
+    context_concepts = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='context_concepts')
 
     context_time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='context_time_stamps')
 
