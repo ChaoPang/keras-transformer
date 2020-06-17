@@ -203,7 +203,8 @@ class TimeAttention(tf.keras.layers.Layer):
                                   perm=[0, 2, 1])
 
         half_window_size = int(self.context_seq_len / 2)
-        time_delta_value_clipped = tf.clip_by_value(time_delta, clip_value_min=-half_window_size, clip_value_max=half_window_size - 1)
+        time_delta_value_clipped = tf.clip_by_value(time_delta, clip_value_min=-half_window_size,
+                                                    clip_value_max=half_window_size - 1)
         # shape = (batch_size, context_seq_length, context_seq_length)
         time_delta_one_hot = tf.one_hot(time_delta_value_clipped + half_window_size, self.context_seq_len)
 

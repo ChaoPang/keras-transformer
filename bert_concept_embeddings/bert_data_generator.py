@@ -172,30 +172,27 @@ class BatchGenerator:
             next_bunch_of_examples = islice(examples, self.batch_size)
             target_concepts, target_time_stamps, context_concepts, context_time_stamps = zip(
                 *list(next_bunch_of_examples))
-            
+
             target_concepts = np.asarray(target_concepts)
             target_time_stamps = np.asarray(target_time_stamps)
-            context_concepts = pad_sequences(context_concepts, maxlen=self.max_sequence_length, padding='post', value=self.unused_token_id)
-            context_time_stamps = pad_sequences(context_time_stamps, maxlen=self.max_sequence_length, padding='post', value=0, dtype='float32')
+            context_concepts = pad_sequences(context_concepts, maxlen=self.max_sequence_length, padding='post',
+                                             value=self.unused_token_id)
+            context_time_stamps = pad_sequences(context_time_stamps, maxlen=self.max_sequence_length, padding='post',
+                                                value=0, dtype='float32')
             mask = (context_concepts == self.unused_token_id).astype(int)
-              
-            yield ({'target_concepts':target_concepts, 
-                   'target_time_stamps': target_time_stamps, 
-                   'context_concepts': context_concepts, 
-                   'context_time_stamps': context_time_stamps, 
-                   'mask': mask}, target_concepts)
-#             yield ([np.asarray(target_concepts), 
-#                     np.asarray(target_time_stamps), 
-#                     context_concepts, 
-#                     context_time_stamps, 
-#                     mask], np.asarray(target_concepts))
+
+            yield ({'target_concepts': target_concepts,
+                    'target_time_stamps': target_time_stamps,
+                    'context_concepts': context_concepts,
+                    'context_time_stamps': context_time_stamps,
+                    'mask': mask}, target_concepts)
 
     def generate_examples(self):
         half_window_size = int(self.max_sequence_length / 2)
         while True:
             for tup in self.patient_event_sequence.itertuples():
                 concept_ids = tup.token_ids
-                dates = tup.normalized_dates
+                dates = tup.dates
                 for i, concept_id in enumerate(concept_ids):
                     left_index = i - half_window_size if i - half_window_size > 0 else 0
                     right_index = i + 1 + half_window_size
@@ -205,5 +202,3 @@ class BatchGenerator:
                     context_time_stamps = dates[left_index: i] + dates[i + 1: right_index]
 
                     yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps)
-
-
