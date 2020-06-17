@@ -5,7 +5,7 @@ import pickle
 import pandas as pd
 import numpy as np
 
-from bert_data_generator import ConceptTokenizer, BatchGenerator
+from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BatchGenerator
 from bert_concept_embeddings.model import time_attention_model
 from bert_concept_embeddings.utils import CosineLRSchedule
 
@@ -68,7 +68,7 @@ batch_generator = BatchGenerator(patient_event_sequence=training_data,
                            unused_token_id=unused_token_id)
 
 # +
-dataset = tf.data.Dataset.from_generator(batch_generator.generate_batches, 
+dataset = tf.data.Dataset.from_generator(batch_generator.batch_generator,
                                          output_types=({'target_concepts': tf.int32, 
                                                         'target_time_stamps': tf.float32, 
                                                         'context_concepts': tf.int32, 
