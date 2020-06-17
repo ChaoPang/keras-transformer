@@ -169,8 +169,6 @@ class TimeAttention(tf.keras.layers.Layer):
         self.return_logits = return_logits
 
         self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size, self.context_seq_len)
-        self.normalization_layer = tf.keras.layers.LayerNormalization()
-        self.elementwise_layer = tf.keras.layers.Multiply()
         self.softmax_layer = tf.keras.layers.Softmax()
 
     def get_config(self):
@@ -204,11 +202,13 @@ class TimeAttention(tf.keras.layers.Layer):
         time_delta = tf.transpose(tf.expand_dims(target_time_stamps, axis=1) - multiplied_context_time_stamps,
                                   perm=[0, 2, 1])
 
-        # shape = (batch_size, target_seq_length, context_seq_length)
-        time_delta = self.normalization_layer(tf.cast(time_delta, dtype='float32'))
+        half_window_size = int(self.context_seq_len / 2)
+        time_delta_value_clipped = tf.clip_by_value(time_delta, clip_value_min=-half_window_size, clip_value_max=half_window_size - 1)
+        # shape = (batch_size, context_seq_length, context_seq_length)
+        time_delta_one_hot = tf.one_hot(time_delta_value_clipped + half_window_size, self.context_seq_len)
 
         # shape = (batch_size, target_seq_length, context_seq_length)
-        next_input = self.elementwise_layer([concept_time_embeddings, time_delta])
+        next_input = tf.matmul(concept_time_embeddings, time_delta_one_hot)
 
         # add the mask to the scaled tensor.
         if time_mask is not None:
