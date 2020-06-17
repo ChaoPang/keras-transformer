@@ -32,11 +32,18 @@ class ConceptTokenizer:
     def decode(self, concept_sequence_token_ids):
         return self.tokenzier.sequences_to_texts(concept_sequence_token_ids)
 
+    def get_all_token_indexes(self):
+        all_keys = set(self.tokenzier.index_word.keys())
+        if self.special_tokens is not None:
+            excluded = set([self.tokenzier.word_index[special_token] for special_token in self.special_tokens])
+            all_keys = all_keys - excluded
+        return all_keys
+
     def get_first_token_index(self):
-        return min(list(self.tokenzier.index_word.keys()))
+        return min(self.get_all_token_indexes())
 
     def get_last_token_index(self):
-        return max(list(self.tokenzier.index_word.keys()))
+        return max(self.get_all_token_indexes())
 
     def get_vocab_size(self):
         return len(self.tokenzier.index_word)
@@ -166,11 +173,11 @@ class BatchGenerator:
         self.max_sequence_length = max_sequence_length
         self.unused_token_id = unused_token_id
 
-    def generate_batches(self):
-        examples = self.generate_examples()
+    def batch_generator(self):
+        training_example_generator = self.data_generator()
         while True:
-            next_bunch_of_examples = islice(examples, self.batch_size)
-            target_concepts, target_time_stamps, context_concepts, context_time_stamps = zip(
+            next_bunch_of_examples = islice(training_example_generator, self.batch_size)
+            target_concepts, target_time_stamps, context_concepts, context_time_stamps, labels = zip(
                 *list(next_bunch_of_examples))
 
             target_concepts = np.asarray(target_concepts)
@@ -185,9 +192,9 @@ class BatchGenerator:
                     'target_time_stamps': target_time_stamps,
                     'context_concepts': context_concepts,
                     'context_time_stamps': context_time_stamps,
-                    'mask': mask}, target_concepts)
+                    'mask': mask}, labels)
 
-    def generate_examples(self):
+    def data_generator(self):
         half_window_size = int(self.max_sequence_length / 2)
         while True:
             for tup in self.patient_event_sequence.itertuples():
@@ -201,4 +208,45 @@ class BatchGenerator:
                     context_concepts = concept_ids[left_index: i] + concept_ids[i + 1: right_index]
                     context_time_stamps = dates[left_index: i] + dates[i + 1: right_index]
 
-                    yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps)
+                    yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps, target_concepts)
+
+
+class NegativeSamplingBatchGenerator(BatchGenerator):
+
+    def __init__(self,
+                 num_of_negative_samples: int,
+                 negative_sample_factor: float,
+                 first_token_id: int,
+                 last_token_id: int,
+                 *args, **kwargs):
+        super().__init__(self, *args, **kwargs)
+        self.num_of_negative_samples = num_of_negative_samples
+        self.first_token_id = first_token_id
+        self.last_token_id = last_token_id
+
+        # build the token negative sampling probability distribution
+        all_tokens = self.patient_event_sequence.token_ids.explode()
+        self.token_prob_dist = np.power(all_tokens.value_counts(), negative_sample_factor)
+        self.token_prob_dist = self.token_prob_dist / np.sum(self.token_prob_dist)
+
+    def data_generator(self):
+        training_example_generator = super().data_generator()
+        for next_example in training_example_generator:
+            yield self.negative_sample(next_example)
+
+    def negative_sample(self, next_example):
+
+        target_concepts, target_time_stamps, context_concepts, context_time_stamps, labels = next_example
+        # Yield the positive example
+        yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps, [1])
+
+        all_token_ids = list(range(self.first_token_id, self.last_token_id + 1))
+        samples = set()
+        while len(samples) < self.num_of_negative_samples:
+            candidates = np.random.choice(all_token_ids, self.num_of_negative_samples, False, self.token_prob_dist)
+            samples.update(np.setdiff1d(candidates, target_concepts + context_concepts))
+
+        # yield the negative examples
+        for negative_sample in samples:
+            yield ([negative_sample], target_time_stamps, context_concepts, context_time_stamps, [0])
+
