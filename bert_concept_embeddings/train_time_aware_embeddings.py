@@ -4,7 +4,7 @@ import itertools
 import pandas as pd
 import numpy as np
 
-from bert_data_generator import ConceptTokenizer, BatchGenerator
+from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BatchGenerator
 from bert_concept_embeddings.model import time_attention_model
 from bert_concept_embeddings.utils import CosineLRSchedule
 
