@@ -155,11 +155,6 @@ class BatchGeneratorVisitBased:
 
 
 class BatchGenerator:
-    """
-    This class generates batches for a BERT-based language model
-    in an abstract way, by using an external function sampling
-    sequences of token IDs of a given length.
-    """
 
     def __init__(self, patient_event_sequence,
                  unused_token_id: int,
@@ -167,8 +162,6 @@ class BatchGenerator:
                  batch_size: int):
 
         self.patient_event_sequence = patient_event_sequence
-        self.data_size = len(patient_event_sequence.concept_ids.explode())
-        self.steps_per_epoch = (self.data_size // batch_size)
         self.batch_size = batch_size
         self.max_sequence_length = max_sequence_length
         self.unused_token_id = unused_token_id
@@ -210,6 +203,12 @@ class BatchGenerator:
 
                     yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps, target_concepts)
 
+    def get_steps_per_epoch(self):
+        return self.estimate_data_size() // self.batch_size
+
+    def estimate_data_size(self):
+        return len(self.patient_event_sequence.token_ids.explode())
+
 
 class NegativeSamplingBatchGenerator(BatchGenerator):
 
@@ -219,7 +218,7 @@ class NegativeSamplingBatchGenerator(BatchGenerator):
                  first_token_id: int,
                  last_token_id: int,
                  *args, **kwargs):
-        super().__init__(self, *args, **kwargs)
+        super(NegativeSamplingBatchGenerator, self).__init__(*args, **kwargs)
         self.num_of_negative_samples = num_of_negative_samples
         self.first_token_id = first_token_id
         self.last_token_id = last_token_id
@@ -231,10 +230,12 @@ class NegativeSamplingBatchGenerator(BatchGenerator):
 
     def data_generator(self):
         training_example_generator = super().data_generator()
-        for next_example in training_example_generator:
-            yield self.negative_sample(next_example)
+        for positive_example in training_example_generator:
+            negative_example_generator = self.negative_sample_generator(positive_example)
+            for next_example in negative_example_generator:
+                yield next_example
 
-    def negative_sample(self, next_example):
+    def negative_sample_generator(self, next_example):
 
         target_concepts, target_time_stamps, context_concepts, context_time_stamps, labels = next_example
         # Yield the positive example
@@ -250,3 +251,5 @@ class NegativeSamplingBatchGenerator(BatchGenerator):
         for negative_sample in samples:
             yield ([negative_sample], target_time_stamps, context_concepts, context_time_stamps, [0])
 
+    def estimate_data_size(self):
+        return super().estimate_data_size() * (1 + self.num_of_negative_samples)
