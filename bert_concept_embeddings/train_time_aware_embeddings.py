@@ -5,8 +5,8 @@ import pickle
 import pandas as pd
 import numpy as np
 
-from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BatchGenerator
-from bert_concept_embeddings.model import time_attention_cbow_model
+from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BatchGenerator, NegativeSamplingBatchGenerator
+from bert_concept_embeddings.model import time_attention_cbow_model, time_attention_cbow_negative_sampling_model
 from bert_concept_embeddings.utils import CosineLRSchedule
 
 import tensorflow as tf
@@ -15,12 +15,12 @@ import tensorflow as tf
 CONFIDENCE_PENALTY = 0.1
 BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
 MAX_LEN = 100
-BATCH_SIZE = 128
+BATCH_SIZE = 4096
 LEARNING_RATE = 2e-4
 CONCEPT_EMBEDDING = 128
-EPOCH = 100
+EPOCH = 50
 
-INPUT_FOLDER = '/data/research_ops/omops/ohdsi_covid'
+INPUT_FOLDER = '/data/research_ops/omops/omop_2019q4'
 # -
 
 if os.path.exists(os.path.join(INPUT_FOLDER, 'patient_event_sequence.pickle')):
@@ -55,7 +55,7 @@ unused_token_id = unused_token_id[0]
 
 training_data['token_ids'] = encoded_sequences
 
-pickle.dump(tokenizer, open('tokenizer.pickle', 'wb'))
+pickle.dump(tokenizer, open(os.path.join(INPUT_FOLDER, 'tokenizer.pickle'), 'wb'))
 # -
 batch_generator = BatchGenerator(patient_event_sequence=training_data, 
                            max_sequence_length=MAX_LEN,
@@ -99,8 +99,6 @@ model_callbacks = [
             lr_low=1e-8, 
             initial_period=10), verbose=1),
 ]
-
-model.summary()
 
 model.fit(
     dataset,
