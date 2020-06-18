@@ -5,6 +5,7 @@ import pickle
 import pandas as pd
 import numpy as np
 
+from bert_concept_embeddings.custom_layers import get_custom_objects
 from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BatchGenerator, NegativeSamplingBatchGenerator
 from bert_concept_embeddings.model import time_attention_cbow_model, time_attention_cbow_negative_sampling_model
 from bert_concept_embeddings.utils import CosineLRSchedule
@@ -15,12 +16,12 @@ import tensorflow as tf
 CONFIDENCE_PENALTY = 0.1
 BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
 MAX_LEN = 100
-BATCH_SIZE = 4096
+BATCH_SIZE = 6144
 LEARNING_RATE = 2e-4
 CONCEPT_EMBEDDING = 128
 EPOCH = 50
 
-INPUT_FOLDER = '/data/research_ops/omops/omop_2019q4'
+INPUT_FOLDER = '/data/research_ops/omops/ohdsi_covid'
 # -
 
 if os.path.exists(os.path.join(INPUT_FOLDER, 'patient_event_sequence.pickle')):
@@ -76,21 +77,24 @@ strategy = tf.distribute.MirroredStrategy()
 print('Number of devices: {}'.format(strategy.num_replicas_in_sync))
 
 with strategy.scope():
-    optimizer = tf.keras.optimizers.Adam(
-        lr=LEARNING_RATE, beta_1=0.9, beta_2=0.999)
+    if os.path.exists(os.path.join(INPUT_FOLDER, 'model_time_aware_embeddings.h5')):
+        model = tf.keras.models.load_model('model_time_aware_embeddings.h5', custom_objects=get_custom_objects())
+    else:
+        optimizer = tf.keras.optimizers.Adam(
+            lr=LEARNING_RATE, beta_1=0.9, beta_2=0.999)
 
-    model = time_attention_cbow_model(max_seq_length=MAX_LEN,
-                                      vocabulary_size=tokenizer.get_vocab_size() + 1,
-                                      concept_embedding_size=CONCEPT_EMBEDDING)
-    model.compile(
-        optimizer,
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(),
-        metrics=tf.keras.metrics.sparse_categorical_accuracy)
+        model = time_attention_cbow_model(max_seq_length=MAX_LEN,
+                                          vocabulary_size=tokenizer.get_vocab_size() + 1,
+                                          concept_embedding_size=CONCEPT_EMBEDDING)
+        model.compile(
+            optimizer,
+            loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+            metrics=tf.keras.metrics.sparse_categorical_accuracy)
 
 model_callbacks = [
     tf.keras.callbacks.TensorBoard(log_dir='./logs'),
     tf.keras.callbacks.ModelCheckpoint(
-        filepath='model_time_aware_embeddings.h5',
+        filepath=os.path.join(INPUT_FOLDER, 'model_time_aware_embeddings.h5'),
         save_best_only=True, 
         verbose=1),
     tf.keras.callbacks.LearningRateScheduler(
