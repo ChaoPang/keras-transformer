@@ -32,7 +32,7 @@ def compile_new_model():
 
     _model = transformer_bert_model(
         max_seq_length=MAX_LEN,
-        vocabulary_size=len(tokenizer.tokenzier.index_word) + 1,
+        vocabulary_size=len(tokenizer.tokenizer.index_word) + 1,
         concept_embedding_size=CONCEPT_EMBEDDING,
         d_model=5,
         num_heads=8)

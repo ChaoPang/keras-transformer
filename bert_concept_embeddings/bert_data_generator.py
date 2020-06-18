@@ -19,23 +19,27 @@ class ConceptTokenizer:
 
     def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='0'):
         self.special_tokens = special_tokens
-        self.tokenzier = Tokenizer(oov_token=oov_token, filters='', lower=False)
+        self.tokenizer = Tokenizer(oov_token=oov_token, filters='', lower=False)
 
     def fit_on_concept_sequences(self, concept_sequences):
-        self.tokenzier.fit_on_texts(concept_sequences)
+        self.tokenizer.fit_on_texts(concept_sequences)
         if self.special_tokens is not None:
-            self.tokenzier.fit_on_texts(self.special_tokens)
+            self.tokenizer.fit_on_texts(self.special_tokens)
 
     def encode(self, concept_sequences):
-        return self.tokenzier.texts_to_sequences(concept_sequences)
+        return self.tokenizer.texts_to_sequences(concept_sequences)
 
     def decode(self, concept_sequence_token_ids):
-        return self.tokenzier.sequences_to_texts(concept_sequence_token_ids)
+        return self.tokenizer.sequences_to_texts(concept_sequence_token_ids)
 
     def get_all_token_indexes(self):
-        all_keys = set(self.tokenzier.index_word.keys())
+        all_keys = set(self.tokenizer.index_word.keys())
+
+        if self.tokenizer.oov_token is not None:
+            all_keys.remove(self.tokenizer.word_index[self.tokenizer.oov_token])
+
         if self.special_tokens is not None:
-            excluded = set([self.tokenzier.word_index[special_token] for special_token in self.special_tokens])
+            excluded = set([self.tokenizer.word_index[special_token] for special_token in self.special_tokens])
             all_keys = all_keys - excluded
         return all_keys
 
@@ -46,7 +50,7 @@ class ConceptTokenizer:
         return max(self.get_all_token_indexes())
 
     def get_vocab_size(self):
-        return len(self.tokenzier.index_word)
+        return len(self.tokenizer.index_word)
 
 
 class BatchGeneratorVisitBased:
