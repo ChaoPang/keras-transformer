@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 
 from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BatchGenerator
-from bert_concept_embeddings.model import time_attention_model
+from bert_concept_embeddings.model import time_attention_cbow_model
 from bert_concept_embeddings.utils import CosineLRSchedule
 
 import tensorflow as tf
@@ -79,9 +79,9 @@ with strategy.scope():
     optimizer = tf.keras.optimizers.Adam(
         lr=LEARNING_RATE, beta_1=0.9, beta_2=0.999)
 
-    model = time_attention_model(max_seq_length=MAX_LEN, 
-                             vocabulary_size=tokenizer.get_vocab_size() + 1, 
-                             concept_embedding_size=CONCEPT_EMBEDDING)
+    model = time_attention_cbow_model(max_seq_length=MAX_LEN,
+                                      vocabulary_size=tokenizer.get_vocab_size() + 1,
+                                      concept_embedding_size=CONCEPT_EMBEDDING)
     model.compile(
         optimizer,
         loss=tf.keras.losses.SparseCategoricalCrossentropy(),
