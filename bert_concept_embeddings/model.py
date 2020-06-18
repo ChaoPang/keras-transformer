@@ -53,7 +53,7 @@ def time_attention_cbow_negative_sampling_model(max_seq_length: int,
     combined_embeddings = tf.matmul(time_attentions, context_concept_embeddings)
 
     # shape = (batch_size, 1, 1)
-    concept_predictions = sigmoid_layer(dot_layer[target_concept_embeddings, combined_embeddings])
+    concept_predictions = sigmoid_layer(dot_layer([target_concept_embeddings, combined_embeddings]))
 
     model = tf.keras.Model(
         inputs=[target_concepts, target_time_stamps, context_concepts, context_time_stamps, mask],

@@ -179,6 +179,12 @@ class TimeAttention(tf.keras.layers.Layer):
         config['return_logits'] = self.return_logits
         return config
 
+    def build(self, input_shape):
+        self.time_attention_bias = self.add_weight(name='time_attention_bias',
+                                    shape=self.context_seq_len,
+                                    initializer=tf.keras.initializers.zeros,
+                                    trainable=True)
+
     def call(self, inputs, **kwargs):
         """
 
@@ -209,7 +215,8 @@ class TimeAttention(tf.keras.layers.Layer):
         time_delta_one_hot = tf.one_hot(time_delta_value_clipped + half_window_size, self.context_seq_len)
 
         # shape = (batch_size, target_seq_length, context_seq_length)
-        next_input = tf.squeeze(tf.matmul(tf.expand_dims(concept_time_embeddings, axis=2), time_delta_one_hot), axis=-2)
+        next_input = tf.squeeze(tf.matmul(tf.expand_dims(concept_time_embeddings, axis=2), time_delta_one_hot),
+                                axis=-2) + self.time_attention_bias
 
         # add the mask to the scaled tensor.
         if time_mask is not None:
