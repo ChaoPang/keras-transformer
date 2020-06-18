@@ -168,7 +168,8 @@ class TimeAttention(tf.keras.layers.Layer):
         self.context_seq_len = context_seq_len
         self.return_logits = return_logits
 
-        self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size, self.context_seq_len)
+        self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size, self.context_seq_len,
+                                                         embeddings_initializer=tf.keras.initializers.zeros)
         self.softmax_layer = tf.keras.layers.Softmax()
 
     def get_config(self):
@@ -181,9 +182,9 @@ class TimeAttention(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.time_attention_bias = self.add_weight(name='time_attention_bias',
-                                    shape=self.context_seq_len,
-                                    initializer=tf.keras.initializers.zeros,
-                                    trainable=True)
+                                                   shape=self.context_seq_len,
+                                                   initializer=tf.keras.initializers.zeros,
+                                                   trainable=True)
 
     def call(self, inputs, **kwargs):
         """
