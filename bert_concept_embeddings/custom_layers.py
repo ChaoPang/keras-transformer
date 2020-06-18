@@ -205,11 +205,11 @@ class TimeAttention(tf.keras.layers.Layer):
         half_window_size = int(self.context_seq_len / 2)
         time_delta_value_clipped = tf.clip_by_value(time_delta, clip_value_min=-half_window_size,
                                                     clip_value_max=half_window_size - 1)
-        # shape = (batch_size, context_seq_length, context_seq_length)
+        # shape = (batch_size, target_seq_length, context_seq_length, context_seq_length)
         time_delta_one_hot = tf.one_hot(time_delta_value_clipped + half_window_size, self.context_seq_len)
 
         # shape = (batch_size, target_seq_length, context_seq_length)
-        next_input = tf.matmul(concept_time_embeddings, time_delta_one_hot)
+        next_input = tf.squeeze(tf.matmul(tf.expand_dims(concept_time_embeddings, axis=2), time_delta_one_hot), axis=-2)
 
         # add the mask to the scaled tensor.
         if time_mask is not None:
