@@ -43,11 +43,6 @@ else:
     training_data.to_pickle(os.path.join(INPUT_FOLDER, 'patient_event_sequence.pickle'))
 
 # +
-# all_time_stamps = training_data.dates.explode().astype(int)
-# training_data['normalized_dates'] = ((all_time_stamps - all_time_stamps.mean()) / all_time_stamps.std()).groupby(level=0).apply(list)
-
-
-# +
 tokenizer = ConceptTokenizer(special_tokens=BERT_SPECIAL_TOKENS)
 
 tokenizer.fit_on_concept_sequences(training_data.concept_ids)
@@ -109,7 +104,7 @@ model.summary()
 
 model.fit(
     dataset,
-    steps_per_epoch=batch_generator.steps_per_epoch,
+    steps_per_epoch=batch_generator.get_steps_per_epoch(),
     epochs=EPOCH,
     callbacks=model_callbacks,
     validation_data=dataset,
