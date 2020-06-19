@@ -61,40 +61,41 @@ def tokenize_concept_sequences(training_data, tokenizer_path):
     return _tokenizer, training_data
 
 
-def generate_dataset(raw_input_data_path,
-                     training_data_path,
-                     tokenizer_path,
-                     max_sequence_length,
-                     batch_size):
-    """
+# +
+# def generate_dataset(raw_input_data_path,
+#                      training_data_path,
+#                      tokenizer_path,
+#                      max_sequence_length,
+#                      batch_size):
+#     """
 
-    :param raw_input_data_path:
-    :param training_data_path:
-    :param tokenizer_path:
-    :param max_sequence_length:
-    :param batch_size:
-    :return:
-    """
-    training_data = process_raw_input(raw_input_data_path, training_data_path)
+#     :param raw_input_data_path:
+#     :param training_data_path:
+#     :param tokenizer_path:
+#     :param max_sequence_length:
+#     :param batch_size:
+#     :return:
+#     """
+#     training_data = process_raw_input(raw_input_data_path, training_data_path)
 
-    tokenizer, training_data = tokenize_concept_sequences(training_data, tokenizer_path)
-    unused_token_id = tokenizer.get_unused_token_id()
+#     tokenizer, training_data = tokenize_concept_sequences(training_data, tokenizer_path)
+#     unused_token_id = tokenizer.get_unused_token_id()
 
-    batch_generator = BatchGenerator(patient_event_sequence=training_data,
-                                     max_sequence_length=max_sequence_length,
-                                     batch_size=batch_size,
-                                     unused_token_id=unused_token_id)
+#     batch_generator = BatchGenerator(patient_event_sequence=training_data,
+#                                      max_sequence_length=max_sequence_length,
+#                                      batch_size=batch_size,
+#                                      unused_token_id=unused_token_id)
 
-    tf_dataset = tf.data.Dataset.from_generator(batch_generator.batch_generator,
-                                                output_types=({'target_concepts': tf.int32,
-                                                               'target_time_stamps': tf.float32,
-                                                               'context_concepts': tf.int32,
-                                                               'context_time_stamps': tf.float32,
-                                                               'mask': tf.int32}, tf.int32))
+#     tf_dataset = tf.data.Dataset.from_generator(batch_generator.batch_generator,
+#                                                 output_types=({'target_concepts': tf.int32,
+#                                                                'target_time_stamps': tf.float32,
+#                                                                'context_concepts': tf.int32,
+#                                                                'context_time_stamps': tf.float32,
+#                                                                'mask': tf.int32}, tf.int32))
 
-    return tf_dataset.prefetch(tf.data.experimental.AUTOTUNE).shuffle(
-        True).cache(), batch_generator.get_steps_per_epoch()
-
+#     return tf_dataset.prefetch(tf.data.experimental.AUTOTUNE).shuffle(
+#         True).cache(), batch_generator.get_steps_per_epoch(), tokenizer
+# -
 
 def train(model_path,
           dataset,
@@ -107,7 +108,7 @@ def train(model_path,
           learning_rate,
           val_dataset,
           val_steps_per_epoch,
-          tf_board_log_path='./logs'):
+          tf_board_log_path):
     """
 
     :param model_path:
@@ -187,6 +188,7 @@ if __name__ == "__main__":
                         '--max_seq_length',
                         dest='max_seq_length',
                         action='store',
+                        type=int,
                         default=100,
                         required=False)
 
@@ -194,6 +196,7 @@ if __name__ == "__main__":
                         '--time_window_size',
                         dest='time_window_size',
                         action='store',
+                        type=int,
                         default=100,
                         required=False)
 
@@ -201,6 +204,7 @@ if __name__ == "__main__":
                         '--concept_embedding_size',
                         dest='concept_embedding_size',
                         action='store',
+                        type=int,
                         default=128,
                         required=False)
 
@@ -208,6 +212,7 @@ if __name__ == "__main__":
                         '--epochs',
                         dest='epochs',
                         action='store',
+                        type=int,
                         default=50,
                         required=False)
 
@@ -215,21 +220,23 @@ if __name__ == "__main__":
                         '--batch_size',
                         dest='batch_size',
                         action='store',
+                        type=int,
                         default=128,
                         required=False)
 
-    parser.add_argument('-l',
+    parser.add_argument('-lr',
                         '--learning_rate',
                         dest='learning_rate',
                         action='store',
+                        type=int,
                         default=2e-4,
                         required=False)
 
-    parser.add_argument('-b',
+    parser.add_argument('-bl',
                         '--tf_board_log_path',
                         dest='tf_board_log_path',
                         action='store',
-                        default=2e-4,
+                        default='./logs',
                         required=False)
 
     args = parser.parse_args()
@@ -238,18 +245,34 @@ if __name__ == "__main__":
     training_data_path = os.path.join(args.output_folder, 'patient_event_sequence.pickle')
     tokenizer_path = os.path.join(args.output_folder, 'tokenizer.pickle')
     model_path = os.path.join(args.output_folder, 'model_time_aware_embeddings.h5')
+    
+    training_data = process_raw_input(raw_input_data_path, training_data_path)
 
-    dataset, steps_per_epoch = generate_dataset(raw_input_data_path, training_data_path, tokenizer_path,
-                                                args.max_seq_length, args.batch_size)
+    tokenizer, training_data = tokenize_concept_sequences(training_data, tokenizer_path)
+    unused_token_id = tokenizer.get_unused_token_id()
+
+    batch_generator = BatchGenerator(patient_event_sequence=training_data,
+                                     max_sequence_length=args.max_seq_length,
+                                     batch_size=args.batch_size,
+                                     unused_token_id=unused_token_id)
+
+    dataset = tf.data.Dataset.from_generator(batch_generator.batch_generator,
+                                                output_types=({'target_concepts': tf.int32,
+                                                               'target_time_stamps': tf.float32,
+                                                               'context_concepts': tf.int32,
+                                                               'context_time_stamps': tf.float32,
+                                                               'mask': tf.int32}, tf.int32))
+
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE).shuffle(True).cache()
 
     train(model_path=model_path,
           dataset=dataset,
           max_seq_length=args.max_seq_length,
           time_window_size=args.time_window_size,
           concept_embedding_size=args.concept_embedding_size,
-          vocabulary_size=args.vocabulary_size,
+          vocabulary_size=tokenizer.get_vocab_size(),
           epochs=args.epochs,
-          steps_per_epoch=steps_per_epoch,
+          steps_per_epoch=batch_generator.get_steps_per_epoch(),
           learning_rate=args.learning_rate,
           val_dataset=dataset,
           val_steps_per_epoch=10,

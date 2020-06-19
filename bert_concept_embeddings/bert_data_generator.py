@@ -53,7 +53,8 @@ class ConceptTokenizer:
         return max(self.get_all_token_indexes())
 
     def get_vocab_size(self):
-        return len(self.tokenizer.index_word)
+        # + 1 because oov_token takes the index 0
+        return len(self.tokenizer.index_word) + 1
 
     def get_unused_token_id(self):
         unused_token_id = self.encode(self.unused_token)
