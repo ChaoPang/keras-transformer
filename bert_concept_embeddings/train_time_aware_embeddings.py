@@ -61,42 +61,6 @@ def tokenize_concept_sequences(training_data, tokenizer_path):
     return _tokenizer, training_data
 
 
-# +
-# def generate_dataset(raw_input_data_path,
-#                      training_data_path,
-#                      tokenizer_path,
-#                      max_sequence_length,
-#                      batch_size):
-#     """
-
-#     :param raw_input_data_path:
-#     :param training_data_path:
-#     :param tokenizer_path:
-#     :param max_sequence_length:
-#     :param batch_size:
-#     :return:
-#     """
-#     training_data = process_raw_input(raw_input_data_path, training_data_path)
-
-#     tokenizer, training_data = tokenize_concept_sequences(training_data, tokenizer_path)
-#     unused_token_id = tokenizer.get_unused_token_id()
-
-#     batch_generator = BatchGenerator(patient_event_sequence=training_data,
-#                                      max_sequence_length=max_sequence_length,
-#                                      batch_size=batch_size,
-#                                      unused_token_id=unused_token_id)
-
-#     tf_dataset = tf.data.Dataset.from_generator(batch_generator.batch_generator,
-#                                                 output_types=({'target_concepts': tf.int32,
-#                                                                'target_time_stamps': tf.float32,
-#                                                                'context_concepts': tf.int32,
-#                                                                'context_time_stamps': tf.float32,
-#                                                                'mask': tf.int32}, tf.int32))
-
-#     return tf_dataset.prefetch(tf.data.experimental.AUTOTUNE).shuffle(
-#         True).cache(), batch_generator.get_steps_per_epoch(), tokenizer
-# -
-
 def train(model_path,
           dataset,
           max_seq_length,
@@ -245,7 +209,7 @@ if __name__ == "__main__":
     training_data_path = os.path.join(args.output_folder, 'patient_event_sequence.pickle')
     tokenizer_path = os.path.join(args.output_folder, 'tokenizer.pickle')
     model_path = os.path.join(args.output_folder, 'model_time_aware_embeddings.h5')
-    
+
     training_data = process_raw_input(raw_input_data_path, training_data_path)
 
     tokenizer, training_data = tokenize_concept_sequences(training_data, tokenizer_path)
@@ -257,11 +221,11 @@ if __name__ == "__main__":
                                      unused_token_id=unused_token_id)
 
     dataset = tf.data.Dataset.from_generator(batch_generator.batch_generator,
-                                                output_types=({'target_concepts': tf.int32,
-                                                               'target_time_stamps': tf.float32,
-                                                               'context_concepts': tf.int32,
-                                                               'context_time_stamps': tf.float32,
-                                                               'mask': tf.int32}, tf.int32))
+                                             output_types=({'target_concepts': tf.int32,
+                                                            'target_time_stamps': tf.float32,
+                                                            'context_concepts': tf.int32,
+                                                            'context_time_stamps': tf.float32,
+                                                            'mask': tf.int32}, tf.int32))
 
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE).shuffle(True).cache()
 

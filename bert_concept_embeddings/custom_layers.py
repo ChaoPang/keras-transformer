@@ -187,6 +187,7 @@ class TimeAttention(tf.keras.layers.Layer):
         config['vocab_size'] = self.vocab_size
         config['target_seq_len'] = self.target_seq_len
         config['context_seq_len'] = self.context_seq_len
+        config['time_window_size'] = self.time_window_size
         config['return_logits'] = self.return_logits
         return config
 
