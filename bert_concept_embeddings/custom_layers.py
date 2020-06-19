@@ -174,10 +174,10 @@ class TimeAttention(tf.keras.layers.Layer):
         # Save the half window size
         self.half_window_size = int(time_window_size / 2)
         # Pad one for time zero, in which the index event occurred
-        self.full_time_window_size = self.half_window_size * 2 + 1
+        self.time_window_size = self.half_window_size * 2 + 1
         self.return_logits = return_logits
 
-        self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size, self.full_time_window_size,
+        self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size, self.time_window_size,
                                                          embeddings_initializer=tf.keras.initializers.zeros,
                                                          name='time_attention_embedding')
         self.softmax_layer = tf.keras.layers.Softmax()
@@ -225,7 +225,7 @@ class TimeAttention(tf.keras.layers.Layer):
         time_delta_value_clipped = tf.clip_by_value(time_delta, clip_value_min=-self.half_window_size,
                                                     clip_value_max=self.half_window_size)
         # shape = (batch_size, target_seq_length, context_seq_length, full_time_window_size)
-        time_delta_one_hot = tf.one_hot(time_delta_value_clipped + self.half_window_size, self.full_time_window_size)
+        time_delta_one_hot = tf.one_hot(time_delta_value_clipped + self.half_window_size, self.time_window_size)
 
         # shape = (batch_size, target_seq_length, full_time_window_size, 1)
         concept_time_embeddings_expanded = tf.expand_dims(concept_time_embeddings, axis=-1)
