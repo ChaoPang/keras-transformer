@@ -193,7 +193,7 @@ class TimeAttention(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.time_attention_bias = self.add_weight(name='time_attention_bias',
-                                                   shape=self.context_seq_len,
+                                                   shape=self.time_window_size,
                                                    initializer=tf.keras.initializers.zeros,
                                                    trainable=True)
 
@@ -209,8 +209,8 @@ class TimeAttention(tf.keras.layers.Layer):
         context_time_stamps = inputs[2]
         time_mask = inputs[3]
 
-        # shape = (batch_size, target_seq_length, full_time_window_size)
-        concept_time_embeddings = self.embedding_layer(target_concepts)
+        # shape = (batch_size, target_seq_length, time_window_size)
+        concept_time_embeddings = self.embedding_layer(target_concepts) + self.time_attention_bias
 
         # shape = (batch_size, context_seq_length, target_seq_len)
         multiplied_context_time_stamps = tf.tile(tf.expand_dims(context_time_stamps, axis=-1),
@@ -227,12 +227,12 @@ class TimeAttention(tf.keras.layers.Layer):
         # shape = (batch_size, target_seq_length, context_seq_length, full_time_window_size)
         time_delta_one_hot = tf.one_hot(time_delta_value_clipped + self.half_window_size, self.time_window_size)
 
-        # shape = (batch_size, target_seq_length, full_time_window_size, 1)
+        # shape = (batch_size, target_seq_length, time_window_size, 1)
         concept_time_embeddings_expanded = tf.expand_dims(concept_time_embeddings, axis=-1)
 
         # shape = (batch_size, target_seq_length, context_seq_length)
         next_input = tf.squeeze(tf.matmul(time_delta_one_hot, concept_time_embeddings_expanded),
-                                axis=-1) + self.time_attention_bias
+                                axis=-1)
 
         # add the mask to the scaled tensor.
         if time_mask is not None:
