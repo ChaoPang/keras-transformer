@@ -216,7 +216,7 @@ class TimeAttention(tf.keras.layers.Layer):
         # shape = (batch_size, target_seq_length, context_seq_length, context_seq_length)
         time_delta_one_hot = tf.one_hot(time_delta_value_clipped + half_window_size, self.context_seq_len)
 
-        # shape = (batch_size, target_seq_length, 1, context_seq_length)
+        # shape = (batch_size, target_seq_length, context_seq_length, 1)
         concept_time_embeddings_expanded = tf.expand_dims(concept_time_embeddings, axis=-1)
 
         # shape = (batch_size, target_seq_length, context_seq_length)
