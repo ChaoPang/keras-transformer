@@ -17,6 +17,7 @@ BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
 
 class ConceptTokenizer:
     unused_token = ['[UNUSED]']
+    mask_token = ['[MASK]']
 
     def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='0'):
         self.special_tokens = special_tokens
@@ -24,6 +25,7 @@ class ConceptTokenizer:
 
     def fit_on_concept_sequences(self, concept_sequences):
         self.tokenizer.fit_on_texts(concept_sequences)
+        self.tokenizer.fit_on_texts(self.mask_token)
         self.tokenizer.fit_on_texts(self.unused_token)
         if self.special_tokens is not None:
             self.tokenizer.fit_on_texts(self.special_tokens)
@@ -58,6 +60,10 @@ class ConceptTokenizer:
     def get_unused_token_id(self):
         unused_token_id = self.encode(self.unused_token)
         return unused_token_id[0] if isinstance(unused_token_id, list) else unused_token_id
+
+    def get_mask_token_id(self):
+        mask_token_id = self.encode(self.mask_token)
+        return mask_token_id[0] if isinstance(mask_token_id, list) else mask_token_id
 
 
 class BatchGenerator:
@@ -182,7 +188,7 @@ class BertBatchGenerator(BatchGenerator):
         training_example_generator = self.data_generator()
         while True:
             next_bunch_of_examples = islice(training_example_generator, self.batch_size)
-            mask, sequence, masked_sequence, time_stamp_sequence = zip(*list(next_bunch_of_examples))
+            sequence_mask, sequence, masked_sequence, time_stamp_sequence = zip(*list(next_bunch_of_examples))
 
             sequence = pad_sequences(np.asarray(sequence), maxlen=self.max_sequence_length, padding='post',
                                      value=self.unused_token_id)
@@ -192,11 +198,12 @@ class BertBatchGenerator(BatchGenerator):
             time_stamp_sequence = pad_sequences(np.asarray(time_stamp_sequence), maxlen=self.max_sequence_length,
                                                 padding='post',
                                                 value=0, dtype='float32')
-
-            combined_label = np.stack([sequence, mask], axis=-1)
+            mask = (sequence == self.unused_token_id).astype(int)
+            combined_label = np.stack([sequence, sequence_mask], axis=-1)
 
             yield ({'concept_ids': masked_sequence,
-                    'time_stamps': time_stamp_sequence}, [combined_label])
+                    'time_stamps': time_stamp_sequence,
+                    'mask': mask}, [combined_label])
 
     def data_generator(self):
         while True:
