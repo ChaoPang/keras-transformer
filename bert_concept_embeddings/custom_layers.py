@@ -164,8 +164,9 @@ class TimeAttention(tf.keras.layers.Layer):
                  context_seq_len: int,
                  time_window_size: int,
                  return_logits: bool = False,
+                 *args,
                  **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
 
         self.vocab_size = vocab_size
         self.target_seq_len = target_seq_len
@@ -243,16 +244,15 @@ class TimeAttention(tf.keras.layers.Layer):
 
 class TimeSelfAttention(TimeAttention):
 
-    def __init__(self, vocab_size: int, seq_len: int, return_logits: bool = False, **kwargs):
+    def __init__(self, seq_len: int, *args, **kwargs):
         """
 
         :param vocab_size:
         :param seq_len:
         """
-        super().__init__(vocab_size=vocab_size,
-                         target_seq_len=seq_len,
+        super().__init__(target_seq_len=seq_len,
                          context_seq_len=seq_len,
-                         return_logits=return_logits, **kwargs)
+                         *args, **kwargs)
 
     def call(self, inputs, **kwargs):
         """
