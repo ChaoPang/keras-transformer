@@ -124,9 +124,10 @@ def time_attention_cbow_model(max_seq_length: int,
 # -
 def transformer_bert_model(
         max_seq_length: int,
+        time_window_size: int,
         vocabulary_size: int,
         concept_embedding_size: int,
-        d_model: int,
+        depth: int,
         num_heads: int,
         transformer_dropout: float = 0.1,
         embedding_dropout: float = 0.6,
@@ -161,7 +162,9 @@ def transformer_bert_model(
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=l2_regularizer)
 
-    time_embedding_layer = TimeSelfAttention(vocab_size=vocabulary_size, seq_len=max_seq_length)
+    time_embedding_layer = TimeSelfAttention(vocab_size=vocabulary_size,
+                                             seq_len=max_seq_length,
+                                             time_window_size=time_window_size)
 
     output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
@@ -178,16 +181,18 @@ def transformer_bert_model(
     # "Attention is all you need", 2017)
     next_step_input = coordinate_embedding_layer(next_step_input, step=0)
 
-    time_attention_logits = time_embedding_layer(concept_ids, time_stamps, mask)
+    time_attention_logits = time_embedding_layer([concept_ids, time_stamps, mask])
     # pad a dimension to accommodate the head split
     time_attention_logits = tf.expand_dims(time_attention_logits, axis=1)
 
-    for i in range(d_model):
+    for i in range(depth):
         next_step_input = (
             EncoderLayer(
                 name='transformer' + str(i),
-                d_model=d_model,
-                num_heads=num_heads, dff=2148)
+                d_model=concept_embedding_size,
+                num_heads=num_heads,
+                rate=transformer_dropout,
+                dff=2148)
             (next_step_input, concept_mask, time_attention_logits))
 
         concept_predictions = output_softmax_layer(
