@@ -7,18 +7,6 @@ from pyspark.sql import functions as F
 
 from bert_concept_embeddings.common import *
 
-# +
-person = spark.read.parquet('/data/research_ops/omops/ohdsi_covid/person/')
-visit_occurrence = spark.read.parquet('/data/research_ops/omops/ohdsi_covid/visit_occurrence/')
-drug_exposure = spark.read.parquet('/data/research_ops/omops/ohdsi_covid/drug_exposure/')
-condition_occurrence = spark.read.parquet('/data/research_ops/omops/ohdsi_covid/condition_occurrence/')
-procedure_occurrence = spark.read.parquet('/data/research_ops/omops/ohdsi_covid/procedure_occurrence/')
-measurement = spark.read.parquet('/data/research_ops/omops/ohdsi_covid/measurement/')
-
-concept = spark.read.parquet('/data/research_ops/omops/ohdsi_covid/concept/')
-measurement = spark.read.parquet('/data/research_ops/omops/ohdsi_covid/concept/')
-# -
-
 input_folder = '/data/research_ops/omops/ohdsi_covid/'
 
 domain_tables = []
@@ -33,11 +21,12 @@ patient_event.cache()
 
 join_collection_udf = F.udf(lambda its: [it for it in sorted(its, key=lambda x: (x[0], x[1]))], T.StructType())
 
-take_first = F.udf(lambda rows: [row[0] for row in rows], T.ArrayType(T.IntegerType()))
-take_second = F.udf(lambda rows: [str(row[1]) for row in rows], T.ArrayType(T.StringType()))
+take_first = F.udf(lambda rows: [row[0] for row in sorted(rows, key=lambda x: (x[0], x[1]))], T.ArrayType(T.IntegerType()))
+take_second = F.udf(lambda rows: [str(row[1]) for row in sorted(rows, key=lambda x: (x[0], x[1]))], T.ArrayType(T.StringType()))
 
 patient_event \
-    .withColumn('date', (F.unix_timestamp('date') / F.lit(24 * 60 * 60)).cast('int')) \
+    .where(F.col('date') >= '1980-01-01') \
+    .withColumn('date', (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')) \
     .withColumn('earliest_visit_date', F.min('date').over(Window.partitionBy('visit_occurrence_id'))) \
     .withColumn('date_concept_id', F.struct(F.col('date'), F.col('standard_concept_id'))) \
     .groupBy('person_id', 'visit_occurrence_id') \
