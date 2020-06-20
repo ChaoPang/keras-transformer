@@ -14,7 +14,7 @@ from keras import losses
 from bert_concept_embeddings.model import *
 from bert_concept_embeddings.utils import CosineLRSchedule
 
-from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BatchGeneratorVisitBased
+from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BertBatchGenerator
 from keras.preprocessing.sequence import pad_sequences
 
 CONFIDENCE_PENALTY = 0.1
@@ -68,13 +68,13 @@ last_normal_token_id = tokenizer.get_last_token_index()
 
 padded_visit_sequences = pad_sequences(encoded_visit_sequence, maxlen=MAX_LEN, padding='post', value=unused_token_id)
 
-data_generator = BatchGeneratorVisitBased(padded_visit_sequences,
-                                          mask_token_id=mask_token_id,
-                                          unused_token_id=unused_token_id,
-                                          max_sequence_length=MAX_LEN,
-                                          batch_size=BATCH_SIZE,
-                                          first_normal_token_id=first_normal_token_id,
-                                          last_normal_token_id=last_normal_token_id)
+data_generator = BertBatchGenerator(padded_visit_sequences,
+                                    mask_token_id=mask_token_id,
+                                    unused_token_id=unused_token_id,
+                                    max_sequence_length=MAX_LEN,
+                                    batch_size=BATCH_SIZE,
+                                    first_normal_token_id=first_normal_token_id,
+                                    last_normal_token_id=last_normal_token_id)
 
 model = compile_new_model()
 
