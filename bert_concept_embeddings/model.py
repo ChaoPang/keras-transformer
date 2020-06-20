@@ -10,12 +10,14 @@ from bert_concept_embeddings.custom_layers import EncoderLayer, TimeSelfAttentio
 
 def time_attention_cbow_negative_sampling_model(max_seq_length: int,
                                                 vocabulary_size: int,
-                                                concept_embedding_size: int):
+                                                concept_embedding_size: int,
+                                                time_window_size: int):
     """
 
     :param max_seq_length:
     :param vocabulary_size:
     :param concept_embedding_size:
+    :param time_window_size:
     :return:
     """
     target_concepts = tf.keras.layers.Input(shape=(1,), dtype='int32', name='target_concepts')
@@ -31,7 +33,8 @@ def time_attention_cbow_negative_sampling_model(max_seq_length: int,
     embedding_layer = tf.keras.layers.Embedding(vocabulary_size, concept_embedding_size, name='embedding_layer',
                                                 mask_zero=True)
 
-    time_attention_layer = TimeAttention(vocab_size=vocabulary_size, target_seq_len=1, context_seq_len=max_seq_length)
+    time_attention_layer = TimeAttention(vocab_size=vocabulary_size, target_seq_len=1, context_seq_len=max_seq_length,
+                                         time_window_size=time_window_size)
 
     dot_layer = tf.keras.layers.Dot(axes=2)
 
@@ -66,12 +69,14 @@ def time_attention_cbow_negative_sampling_model(max_seq_length: int,
 
 def time_attention_cbow_model(max_seq_length: int,
                               vocabulary_size: int,
-                              concept_embedding_size: int):
+                              concept_embedding_size: int,
+                              time_window_size: int):
     """
 
     :param max_seq_length:
     :param vocabulary_size:
     :param concept_embedding_size:
+    :param time_window_size:
     :return:
     """
     target_concepts = tf.keras.layers.Input(shape=(1,), dtype='int32', name='target_concepts')
@@ -87,7 +92,8 @@ def time_attention_cbow_model(max_seq_length: int,
     embedding_layer = tf.keras.layers.Embedding(vocabulary_size, concept_embedding_size, name='embedding_layer',
                                                 mask_zero=True)
 
-    time_embedding_layer = TimeAttention(vocab_size=vocabulary_size, target_seq_len=1, context_seq_len=max_seq_length)
+    time_embedding_layer = TimeAttention(vocab_size=vocabulary_size, target_seq_len=1, context_seq_len=max_seq_length,
+                                         time_window_size=time_window_size)
 
     dense_layer = tf.keras.layers.Dense(vocabulary_size)
 

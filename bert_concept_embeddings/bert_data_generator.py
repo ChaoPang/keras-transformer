@@ -17,12 +17,15 @@ BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
 
 class ConceptTokenizer:
 
+    unused_token = ['[UNUSED]']
+
     def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='0'):
         self.special_tokens = special_tokens
         self.tokenizer = Tokenizer(oov_token=oov_token, filters='', lower=False)
 
     def fit_on_concept_sequences(self, concept_sequences):
         self.tokenizer.fit_on_texts(concept_sequences)
+        self.tokenizer.fit_on_texts(self.unused_token)
         if self.special_tokens is not None:
             self.tokenizer.fit_on_texts(self.special_tokens)
 
@@ -50,7 +53,12 @@ class ConceptTokenizer:
         return max(self.get_all_token_indexes())
 
     def get_vocab_size(self):
-        return len(self.tokenizer.index_word)
+        # + 1 because oov_token takes the index 0
+        return len(self.tokenizer.index_word) + 1
+
+    def get_unused_token_id(self):
+        unused_token_id = self.encode(self.unused_token)
+        return unused_token_id[0] if isinstance(unused_token_id, list) else unused_token_id
 
 
 class BatchGeneratorVisitBased:
