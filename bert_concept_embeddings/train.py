@@ -1,3 +1,5 @@
+import pickle
+
 import pandas as pd
 import os
 import math
@@ -7,19 +9,19 @@ from keras_transformer.bert import (masked_perplexity,
 
 from keras.models import load_model
 # noinspection PyPep8Naming
-from keras import optimizers
-from keras import callbacks
-from keras import losses
+from tensorflow.keras import optimizers
+from tensorflow.keras import callbacks
+from tensorflow.keras import losses
 
 from bert_concept_embeddings.model import *
 from bert_concept_embeddings.utils import CosineLRSchedule
 
 from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BertBatchGenerator
-from keras.preprocessing.sequence import pad_sequences
 
 CONFIDENCE_PENALTY = 0.1
 BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
 MAX_LEN = 512
+TIME_WINDOW = 100
 BATCH_SIZE = 32
 LEARNING_RATE = 2e-4
 CONCEPT_EMBEDDING = 128
@@ -32,9 +34,10 @@ def compile_new_model():
 
     _model = transformer_bert_model(
         max_seq_length=MAX_LEN,
+        time_window_size=TIME_WINDOW,
         vocabulary_size=len(tokenizer.tokenizer.index_word) + 1,
         concept_embedding_size=CONCEPT_EMBEDDING,
-        d_model=5,
+        depth=5,
         num_heads=8)
 
     _model.compile(
@@ -45,36 +48,30 @@ def compile_new_model():
     return _model
 
 
-input_folder = '/data/research_ops/omops/ohdsi_covid/'
-visit_event_sequence = pd.read_parquet(os.path.join(input_folder, 'visit_event_sequence'))
-visit_event_sequence = visit_event_sequence[
-    (visit_event_sequence['collection_size'] >= 10) & (visit_event_sequence['collection_size'] <= 100)]
-visit_sequence = visit_event_sequence['concept_list'].apply(lambda seq: list(set(seq.split(' '))))
-
 # +
-tokenizer = ConceptTokenizer(special_tokens=BERT_SPECIAL_TOKENS)
+input_folder = '/data/research_ops/omops/ohdsi_covid/'
+output_folder = '/data/research_ops/omops/ohdsi_covid/bert'
 
-tokenizer.fit_on_concept_sequences(visit_sequence)
-
-encoded_visit_sequence = tokenizer.encode(visit_sequence)
-mask_token_id, unused_token_id = tokenizer.encode(BERT_SPECIAL_TOKENS)
-
-mask_token_id = mask_token_id[0]
-unused_token_id = unused_token_id[0]
-
-first_normal_token_id = tokenizer.get_first_token_index()
-last_normal_token_id = tokenizer.get_last_token_index()
+training_data_path = os.path.join(input_folder, 'patient_event_sequence.pickle')
+tokenizer_output_path = os.path.join(output_folder, 'tokenizer.pickle')
+model_output_path = os.path.join(output_folder, 'model_time_aware_embeddings.h5')
 # -
 
-padded_visit_sequences = pad_sequences(encoded_visit_sequence, maxlen=MAX_LEN, padding='post', value=unused_token_id)
+training_data = pd.read_pickle(training_data_path)
 
-data_generator = BertBatchGenerator(padded_visit_sequences,
-                                    mask_token_id=mask_token_id,
-                                    unused_token_id=unused_token_id,
+tokenizer = ConceptTokenizer()
+tokenizer.fit_on_concept_sequences(training_data.concept_ids)
+encoded_sequences = tokenizer.encode(training_data.concept_ids)
+training_data['token_ids'] = encoded_sequences
+pickle.dump(tokenizer, open(tokenizer_output_path, 'wb'))
+
+data_generator = BertBatchGenerator(patient_event_sequence=training_data,
+                                    mask_token_id=tokenizer.get_mask_token_id(),
+                                    unused_token_id=tokenizer.get_unused_token_id(),
                                     max_sequence_length=MAX_LEN,
                                     batch_size=BATCH_SIZE,
-                                    first_normal_token_id=first_normal_token_id,
-                                    last_normal_token_id=last_normal_token_id)
+                                    first_token_id=tokenizer.get_first_token_index(),
+                                    last_token_id=tokenizer.get_last_token_index())
 
 model = compile_new_model()
 
@@ -85,7 +82,7 @@ lr_scheduler = callbacks.LearningRateScheduler(
 
 model_callbacks = [
     callbacks.ModelCheckpoint(
-        filepath='model_path.h5',
+        filepath=model_output_path,
         save_best_only=True,
         verbose=1),
     lr_scheduler,
@@ -93,7 +90,7 @@ model_callbacks = [
 
 model.fit_generator(
     generator=data_generator.generate_batches(),
-    steps_per_epoch=data_generator.steps_per_epoch,
+    steps_per_epoch=data_generator.get_steps_per_epoch(),
     epochs=EPOCH,
     callbacks=model_callbacks,
     validation_data=data_generator.generate_batches(),

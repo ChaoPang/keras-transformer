@@ -20,8 +20,8 @@ from typing import List, Callable
 
 import numpy as np
 # noinspection PyPep8Naming
-from keras import backend as K
-from keras.utils import get_custom_objects
+from tensorflow.keras import backend as K
+from tensorflow.keras.utils import get_custom_objects
 
 
 class BatchGeneratorForBERT:
@@ -209,7 +209,7 @@ def masked_perplexity(y_true, y_pred):
     return K.mean(batch_perplexities)
 
 
-class MaskedPenalizedSparseCategoricalCrossentropy:
+class MaskedPenalizedSparseCategoricalCrossentropy(object):
     """
     Masked cross-entropy (see `masked_perplexity` for more details)
     loss function with penalized confidence.
@@ -224,9 +224,10 @@ class MaskedPenalizedSparseCategoricalCrossentropy:
     >>>     loss=MaskedPenalizedSparseCategoricalCrossentropy(0.1))
     """
     def __init__(self, penalty_weight: float):
+        self.__name__ = 'MaskedPenalizedSparseCategoricalCrossentropy'
         self.penalty_weight = penalty_weight
 
-    def __call__(self, y_true, y_pred, sample_weight):
+    def __call__(self, y_true, y_pred, sample_weight=None):
         
         y_true_val = y_true[:, :, 0]
         mask = y_true[:, :, 1]

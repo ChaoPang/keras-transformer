@@ -59,11 +59,15 @@ class ConceptTokenizer:
 
     def get_unused_token_id(self):
         unused_token_id = self.encode(self.unused_token)
-        return unused_token_id[0] if isinstance(unused_token_id, list) else unused_token_id
+        while isinstance(unused_token_id, list):
+            unused_token_id = unused_token_id[0]
+        return unused_token_id
 
     def get_mask_token_id(self):
         mask_token_id = self.encode(self.mask_token)
-        return mask_token_id[0] if isinstance(mask_token_id, list) else mask_token_id
+        while isinstance(mask_token_id, list):
+            mask_token_id = mask_token_id[0]
+        return mask_token_id
 
 
 class BatchGenerator:
@@ -179,7 +183,7 @@ class BertBatchGenerator(BatchGenerator):
                  first_token_id: int,
                  last_token_id: int,
                  *args, **kwargs):
-        super(NegativeSamplingBatchGenerator, self).__init__(*args, **kwargs)
+        super(BertBatchGenerator, self).__init__(*args, **kwargs)
         self.mask_token_id = mask_token_id
         self.first_token_id = first_token_id
         self.last_token_id = last_token_id
@@ -188,7 +192,7 @@ class BertBatchGenerator(BatchGenerator):
         training_example_generator = self.data_generator()
         while True:
             next_bunch_of_examples = islice(training_example_generator, self.batch_size)
-            sequence_mask, sequence, masked_sequence, time_stamp_sequence = zip(*list(next_bunch_of_examples))
+            output_mask, sequence, masked_sequence, time_stamp_sequence = zip(*list(next_bunch_of_examples))
 
             sequence = pad_sequences(np.asarray(sequence), maxlen=self.max_sequence_length, padding='post',
                                      value=self.unused_token_id)
@@ -199,7 +203,7 @@ class BertBatchGenerator(BatchGenerator):
                                                 padding='post',
                                                 value=0, dtype='float32')
             mask = (sequence == self.unused_token_id).astype(int)
-            combined_label = np.stack([sequence, sequence_mask], axis=-1)
+            combined_label = np.stack([sequence, output_mask], axis=-1)
 
             yield ({'concept_ids': masked_sequence,
                     'time_stamps': time_stamp_sequence,
@@ -208,7 +212,6 @@ class BertBatchGenerator(BatchGenerator):
     def data_generator(self):
         while True:
             for tup in self.patient_event_sequence.itertuples():
-
                 concept_ids = tup.token_ids
                 dates = tup.dates
                 for i, concept_id in enumerate(concept_ids):
@@ -218,7 +221,7 @@ class BertBatchGenerator(BatchGenerator):
                     time_stamp_sequence = dates[i: right_index]
 
                     masked_sequence = sequence.copy()
-                    output_mask = np.zeros((len(sequence),), dtype=int)
+                    output_mask = np.zeros((self.max_sequence_length,), dtype=int)
 
                     for word_pos in range(0, len(sequence)):
                         if sequence[word_pos] == self.unused_token_id:
