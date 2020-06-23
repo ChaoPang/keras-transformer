@@ -227,7 +227,7 @@ if __name__ == "__main__":
                                                             'context_time_stamps': tf.float32,
                                                             'mask': tf.int32}, tf.int32))
 
-    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE).shuffle(True).cache()
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE).shuffle(True)
 
     train(model_path=model_path,
           dataset=dataset,

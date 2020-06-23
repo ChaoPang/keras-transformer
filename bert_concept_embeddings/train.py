@@ -20,12 +20,12 @@ from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BertBa
 
 CONFIDENCE_PENALTY = 0.1
 BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
-MAX_LEN = 512
+MAX_LEN = 100
 TIME_WINDOW = 100
-BATCH_SIZE = 32
+BATCH_SIZE = 512
 LEARNING_RATE = 2e-4
 CONCEPT_EMBEDDING = 128
-EPOCH = 100
+EPOCH = 10
 
 
 def compile_new_model():
@@ -73,7 +73,10 @@ data_generator = BertBatchGenerator(patient_event_sequence=training_data,
                                     first_token_id=tokenizer.get_first_token_index(),
                                     last_token_id=tokenizer.get_last_token_index())
 
-model = compile_new_model()
+strategy = tf.distribute.MirroredStrategy()
+print('Number of devices: {}'.format(strategy.num_replicas_in_sync))
+with strategy.scope():
+    model = compile_new_model()
 
 lr_scheduler = callbacks.LearningRateScheduler(
     CosineLRSchedule(lr_high=LEARNING_RATE, lr_low=1e-8,
@@ -96,3 +99,5 @@ model.fit_generator(
     validation_data=data_generator.generate_batches(),
     validation_steps=10,
 )
+
+

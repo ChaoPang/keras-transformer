@@ -163,8 +163,10 @@ def transformer_bert_model(
         embeddings_regularizer=l2_regularizer)
 
     time_embedding_layer = TimeSelfAttention(vocab_size=vocabulary_size,
-                                             seq_len=max_seq_length,
-                                             time_window_size=time_window_size)
+                                             target_seq_len=max_seq_length,
+                                             context_seq_len=max_seq_length,
+                                             time_window_size=time_window_size,
+                                             return_logits=True)
 
     output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
@@ -180,7 +182,7 @@ def transformer_bert_model(
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
     next_step_input = coordinate_embedding_layer(next_step_input, step=0)
-
+    # shape = (batch_size, seq_len, seq_len)
     time_attention_logits = time_embedding_layer([concept_ids, time_stamps, mask])
     # pad a dimension to accommodate the head split
     time_attention_logits = tf.expand_dims(time_attention_logits, axis=1)
@@ -194,9 +196,10 @@ def transformer_bert_model(
                 rate=transformer_dropout,
                 dff=2148)
             (next_step_input, concept_mask, time_attention_logits))
-
-        concept_predictions = output_softmax_layer(
-            output_layer([next_step_input, embedding_matrix]))
+    
+    
+    concept_predictions = output_softmax_layer(
+        output_layer([next_step_input, embedding_matrix]))
 
     model = tf.keras.Model(
         inputs=[concept_ids, time_stamps, mask],

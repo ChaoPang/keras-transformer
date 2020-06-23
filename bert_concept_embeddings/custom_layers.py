@@ -97,7 +97,13 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.wv = tf.keras.layers.Dense(d_model)
 
         self.dense = tf.keras.layers.Dense(d_model)
-
+        
+    def get_config(self):
+        config = super().get_config()
+        config['d_model'] = self.d_model
+        config['num_heads'] = self.num_heads
+        return config
+        
     def split_heads(self, x, batch_size):
         """Split the last dimension into (num_heads, depth).
         Transpose the result such that the shape is (batch_size, num_heads, seq_len, depth)
@@ -135,7 +141,12 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 class EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, **kwargs):
         super(EncoderLayer, self).__init__(**kwargs)
-
+        
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.dff = dff
+        self.rate = rate
+        
         self.mha = MultiHeadAttention(d_model, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
@@ -144,6 +155,14 @@ class EncoderLayer(tf.keras.layers.Layer):
 
         self.dropout1 = tf.keras.layers.Dropout(rate)
         self.dropout2 = tf.keras.layers.Dropout(rate)
+
+    def get_config(self):
+        config = super().get_config()
+        config['d_model'] = self.d_model
+        config['num_heads'] = self.num_heads
+        config['dff'] = self.dff
+        config['rate'] = self.rate
+        return config
 
     def call(self, x, mask, time_attention_logits):
         attn_output, _ = self.mha(x, x, x, mask, time_attention_logits)  # (batch_size, input_seq_len, d_model)
@@ -244,16 +263,6 @@ class TimeAttention(tf.keras.layers.Layer):
 
 class TimeSelfAttention(TimeAttention):
 
-    def __init__(self, seq_len: int, *args, **kwargs):
-        """
-
-        :param vocab_size:
-        :param seq_len:
-        """
-        super().__init__(target_seq_len=seq_len,
-                         context_seq_len=seq_len,
-                         *args, **kwargs)
-
     def call(self, inputs, **kwargs):
         """
 
@@ -272,5 +281,6 @@ get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'EncoderLayer': EncoderLayer,
     'TimeAttention': TimeAttention,
+    'TimeSelfAttention': TimeSelfAttention,
     'PairwiseTimeAttention': TimeSelfAttention
 })
