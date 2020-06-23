@@ -205,7 +205,7 @@ def transformer_bert_model(
         output_layer([next_step_input, embedding_matrix]))
 
     model = tf.keras.Model(
-        inputs=[masked_concept_ids, time_stamps, mask],
+        inputs=[masked_concept_ids, concept_ids, time_stamps, mask],
         outputs=[concept_predictions])
 
     return model
