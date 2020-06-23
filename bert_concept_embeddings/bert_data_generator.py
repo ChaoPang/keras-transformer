@@ -205,7 +205,8 @@ class BertBatchGenerator(BatchGenerator):
             mask = (sequence == self.unused_token_id).astype(int)
             combined_label = np.stack([sequence, output_mask], axis=-1)
 
-            yield ({'concept_ids': masked_sequence,
+            yield ({'concept_ids': sequence,
+                    'masked_concept_ids': masked_sequence,
                     'time_stamps': time_stamp_sequence,
                     'mask': mask}, [combined_label])
 

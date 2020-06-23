@@ -143,6 +143,8 @@ def transformer_bert_model(
     or a vanilla Transformer (2017) to do the job (the original paper uses
     vanilla Transformer).
     """
+    masked_concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='masked_concept_ids')
+
     concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='concept_ids')
 
     time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='time_stamps')
@@ -166,7 +168,7 @@ def transformer_bert_model(
                                              target_seq_len=max_seq_length,
                                              context_seq_len=max_seq_length,
                                              time_window_size=time_window_size,
-                                             return_logits=False)
+                                             return_logits=True)
 
     output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
@@ -177,7 +179,7 @@ def transformer_bert_model(
 
     coordinate_embedding_layer = TransformerCoordinateEmbedding(1, name='coordinate_embedding')
 
-    next_step_input, embedding_matrix = embedding_layer(concept_ids)
+    next_step_input, embedding_matrix = embedding_layer(masked_concept_ids)
 
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
@@ -185,7 +187,7 @@ def transformer_bert_model(
     # shape = (batch_size, seq_len, seq_len)
     time_attention = time_embedding_layer([concept_ids, time_stamps, mask])
     # pad a dimension to accommodate the head split
-    # time_attention = tf.expand_dims(time_attention, axis=1)
+    time_attention = tf.expand_dims(time_attention, axis=1)
 
     for i in range(depth):
         next_step_input = (
@@ -195,15 +197,15 @@ def transformer_bert_model(
                 num_heads=num_heads,
                 rate=transformer_dropout,
                 dff=2148)
-            (next_step_input, concept_mask, None))
+            (next_step_input, concept_mask, time_attention))
 
-    next_step_input = tf.matmul(time_attention, next_step_input)
+    #next_step_input = tf.matmul(time_attention, next_step_input)
 
     concept_predictions = output_softmax_layer(
         output_layer([next_step_input, embedding_matrix]))
 
     model = tf.keras.Model(
-        inputs=[concept_ids, time_stamps, mask],
+        inputs=[masked_concept_ids, time_stamps, mask],
         outputs=[concept_predictions])
 
     return model
