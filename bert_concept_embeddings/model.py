@@ -166,7 +166,7 @@ def transformer_bert_model(
                                              target_seq_len=max_seq_length,
                                              context_seq_len=max_seq_length,
                                              time_window_size=time_window_size,
-                                             return_logits=True)
+                                             return_logits=False)
 
     output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
@@ -183,9 +183,9 @@ def transformer_bert_model(
     # "Attention is all you need", 2017)
     next_step_input = coordinate_embedding_layer(next_step_input, step=0)
     # shape = (batch_size, seq_len, seq_len)
-    time_attention_logits = time_embedding_layer([concept_ids, time_stamps, mask])
+    time_attention = time_embedding_layer([concept_ids, time_stamps, mask])
     # pad a dimension to accommodate the head split
-    time_attention_logits = tf.expand_dims(time_attention_logits, axis=1)
+    # time_attention = tf.expand_dims(time_attention, axis=1)
 
     for i in range(depth):
         next_step_input = (
@@ -195,9 +195,10 @@ def transformer_bert_model(
                 num_heads=num_heads,
                 rate=transformer_dropout,
                 dff=2148)
-            (next_step_input, concept_mask, time_attention_logits))
-    
-    
+            (next_step_input, concept_mask, None))
+
+    next_step_input = tf.matmul(time_attention, next_step_input)
+
     concept_predictions = output_softmax_layer(
         output_layer([next_step_input, embedding_matrix]))
 
