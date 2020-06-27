@@ -5,7 +5,7 @@ import tensorflow as tf
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.position import TransformerCoordinateEmbedding
 
-from bert_concept_embeddings.custom_layers import EncoderLayer, TimeSelfAttention, TimeAttention
+from bert_concept_embeddings.custom_layers import EncoderLayer, TimeSelfAttention, TimeAttention, TimeEmbeddingLayer
 
 
 def time_attention_cbow_negative_sampling_model(max_seq_length: int,
@@ -70,7 +70,8 @@ def time_attention_cbow_negative_sampling_model(max_seq_length: int,
 def time_attention_cbow_model(max_seq_length: int,
                               vocabulary_size: int,
                               concept_embedding_size: int,
-                              time_window_size: int):
+                              time_window_size: int,
+                              time_period: int):
     """
 
     :param max_seq_length:
@@ -83,30 +84,47 @@ def time_attention_cbow_model(max_seq_length: int,
 
     target_time_stamps = tf.keras.layers.Input(shape=(1,), dtype='int32', name='target_time_stamps')
 
+    target_time_periods = tf.keras.layers.Input(shape=(1,), dtype='int32', name='target_time_periods')
+
     context_concepts = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='context_concepts')
 
     context_time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='context_time_stamps')
+
+    context_time_periods = tf.keras.layers.Input(shape=(1,), dtype='int32', name='context_time_periods')
 
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
 
     embedding_layer = tf.keras.layers.Embedding(vocabulary_size, concept_embedding_size, name='embedding_layer',
                                                 mask_zero=True)
 
-    time_embedding_layer = TimeAttention(vocab_size=vocabulary_size, target_seq_len=1, context_seq_len=max_seq_length,
+    time_sensitive_embedding_layer = TimeEmbeddingLayer(vocab_size=vocabulary_size,
+                                                        time_period=time_period,
+                                                        embedding_size=concept_embedding_size)
+
+    time_attention_layer = TimeAttention(vocab_size=vocabulary_size,
+                                         target_seq_len=1,
+                                         context_seq_len=max_seq_length,
                                          time_window_size=time_window_size)
+
+    time_sensitive_time_attention_layer = TimeEmbeddingLayer(vocab_size=vocabulary_size,
+                                                             time_period=time_period,
+                                                             embedding_size=time_window_size)
 
     dense_layer = tf.keras.layers.Dense(vocabulary_size)
 
     softmax_layer = tf.keras.layers.Softmax()
 
     # shape = (batch_size, seq_len, embedding_size)
-    concept_embeddings = embedding_layer(context_concepts)
+    concept_embeddings = embedding_layer(context_concepts) + time_sensitive_embedding_layer(
+        [context_concepts, context_time_periods])
 
     # shape = (batch_size, 1, seq_len)
-    time_embeddings = time_embedding_layer([target_concepts,
+    time_embeddings = time_attention_layer([target_concepts,
                                             target_time_stamps,
                                             context_time_stamps,
                                             mask])
+
+    time_sensitive_time_attention_layer([target_concepts, target_time_periods])
 
     # shape = (batch_size, 1, embedding_size)
     combined_embeddings = tf.matmul(time_embeddings, concept_embeddings)
@@ -115,7 +133,8 @@ def time_attention_cbow_model(max_seq_length: int,
     concept_predictions = softmax_layer(dense_layer(combined_embeddings))
 
     model = tf.keras.Model(
-        inputs=[target_concepts, target_time_stamps, context_concepts, context_time_stamps, mask],
+        inputs=[target_concepts, target_time_stamps, target_time_periods, context_concepts, context_time_stamps,
+                context_time_periods, mask],
         outputs=[concept_predictions])
 
     return model
@@ -199,7 +218,7 @@ def transformer_bert_model(
                 dff=2148)
             (next_step_input, concept_mask, time_attention))
 
-    #next_step_input = tf.matmul(time_attention, next_step_input)
+    # next_step_input = tf.matmul(time_attention, next_step_input)
 
     concept_predictions = output_softmax_layer(
         output_layer([next_step_input, embedding_matrix]))

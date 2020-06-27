@@ -97,13 +97,13 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.wv = tf.keras.layers.Dense(d_model)
 
         self.dense = tf.keras.layers.Dense(d_model)
-        
+
     def get_config(self):
         config = super().get_config()
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
         return config
-        
+
     def split_heads(self, x, batch_size):
         """Split the last dimension into (num_heads, depth).
         Transpose the result such that the shape is (batch_size, num_heads, seq_len, depth)
@@ -141,12 +141,12 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 class EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, **kwargs):
         super(EncoderLayer, self).__init__(**kwargs)
-        
+
         self.d_model = d_model
         self.num_heads = num_heads
         self.dff = dff
         self.rate = rate
-        
+
         self.mha = MultiHeadAttention(d_model, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
@@ -176,6 +176,46 @@ class EncoderLayer(tf.keras.layers.Layer):
         return out2
 
 
+class TimeEmbeddingLayer(tf.keras.layers.Layer):
+    def __init__(self, vocab_size: int,
+                 time_period: int,
+                 embedding_size: int,
+                 *args,
+                 **kwargs):
+        super().__init__(*args, **kwargs)
+        self.vocab_size = vocab_size
+        self.time_period = time_period
+        self.embedding_size = embedding_size
+
+        self.time_embedding_layer = tf.keras.layers.Embedding(self.vocab_size * self.time_period, self.embedding_size,
+                                                              embeddings_initializer=tf.keras.initializers.zeros,
+                                                              name='time_embedding_layer')
+
+    def get_config(self):
+        config = super().get_config()
+        config['vocab_size'] = self.vocab_size
+        config['time_period'] = self.time_period
+        config['embedding_size'] = self.embedding_size
+        return config
+
+    def call(self, inputs, **kwargs):
+        # Shape = (batch_size, seq_len)
+        concept_ids = inputs[0]
+        # Shape = (batch_size, seq_len)
+        time_periods = inputs[1]
+        # Shape = (batch_size, seq_len)
+        time_specific_concept_ids = time_periods * self.vocab_size + concept_ids
+
+        # Shape (batch_size, seq_len, embedding_size)
+        time_period_bias = self.time_embedding_layer(time_specific_concept_ids)
+
+        return time_period_bias
+
+    def get_time_period_weights(self):
+        return tf.transpose(tf.reshape(self.time_embedding_layer.get_weights()[0],
+                                       (self.vocab_size, self.time_period, self.embedding_size)), perm=[1, 0, 2])
+
+
 class TimeAttention(tf.keras.layers.Layer):
 
     def __init__(self, vocab_size: int,
@@ -200,6 +240,11 @@ class TimeAttention(tf.keras.layers.Layer):
         self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size, self.time_window_size,
                                                          embeddings_initializer=tf.keras.initializers.zeros,
                                                          name='time_attention_embedding')
+        self.time_attention_bias = self.add_weight(name='time_attention_bias',
+                                                   shape=self.time_window_size,
+                                                   initializer=tf.keras.initializers.zeros,
+                                                   trainable=True)
+
         self.softmax_layer = tf.keras.layers.Softmax()
 
     def get_config(self):
@@ -211,12 +256,6 @@ class TimeAttention(tf.keras.layers.Layer):
         config['return_logits'] = self.return_logits
         return config
 
-    def build(self, input_shape):
-        self.time_attention_bias = self.add_weight(name='time_attention_bias',
-                                                   shape=self.time_window_size,
-                                                   initializer=tf.keras.initializers.zeros,
-                                                   trainable=True)
-
     def call(self, inputs, **kwargs):
         """
 
@@ -224,40 +263,33 @@ class TimeAttention(tf.keras.layers.Layer):
         :param kwargs:
         :return:
         """
-        target_concepts = inputs[0]
-        target_time_stamps = inputs[1]
-        context_time_stamps = inputs[2]
-        time_mask = inputs[3]
+        target_concepts, target_time_stamps, context_time_stamps, time_mask = inputs
 
-        # shape = (batch_size, target_seq_length, time_window_size)
-        concept_time_embeddings = self.embedding_layer(target_concepts) + self.time_attention_bias
+        concept_time_attentions = self.embedding_layer(target_concepts) + self.time_attention_bias
 
+        return self.apply_time_attentions(concept_time_attentions, context_time_stamps, target_time_stamps, time_mask)
+
+    def apply_time_attentions(self, concept_time_attentions, context_time_stamps, target_time_stamps, time_mask):
         # shape = (batch_size, context_seq_length, target_seq_len)
         multiplied_context_time_stamps = tf.tile(tf.expand_dims(context_time_stamps, axis=-1),
                                                  tf.constant([1, 1, self.target_seq_len]))
-
         # shape = (batch_size, target_seq_length, context_seq_length)
         time_delta = tf.transpose(multiplied_context_time_stamps - tf.expand_dims(target_time_stamps, axis=1),
                                   perm=[0, 2, 1])
-
         # Clip the time deltas to fit the time window. E.g. if the time window is 101, the allowed time delta values
         # are between -50 to 50
         time_delta_value_clipped = tf.clip_by_value(time_delta, clip_value_min=-self.half_window_size,
                                                     clip_value_max=self.half_window_size)
         # shape = (batch_size, target_seq_length, context_seq_length, full_time_window_size)
         time_delta_one_hot = tf.one_hot(time_delta_value_clipped + self.half_window_size, self.time_window_size)
-
         # shape = (batch_size, target_seq_length, time_window_size, 1)
-        concept_time_embeddings_expanded = tf.expand_dims(concept_time_embeddings, axis=-1)
-
+        concept_time_embeddings_expanded = tf.expand_dims(concept_time_attentions, axis=-1)
         # shape = (batch_size, target_seq_length, context_seq_length)
         next_input = tf.squeeze(tf.matmul(time_delta_one_hot, concept_time_embeddings_expanded),
                                 axis=-1)
-
         # add the mask to the scaled tensor.
         if time_mask is not None:
             next_input += (tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
-
         return next_input if self.return_logits else self.softmax_layer(next_input)
 
 
@@ -277,10 +309,53 @@ class TimeSelfAttention(TimeAttention):
         return super().call([batch_concept_sequence, batch_time_sequence, batch_time_sequence, mask])
 
 
+class TimeSensitiveTimeAttention(TimeAttention):
+
+    def __init__(self, vocab_size: int,
+                 target_seq_len: int,
+                 target_time_period: int,
+                 context_seq_len: int,
+                 time_window_size: int,
+                 return_logits: bool = False, *args, **kwargs):
+        super(TimeSensitiveTimeAttention, self).__init__(vocab_size=vocab_size,
+                                                         target_seq_len=target_seq_len,
+                                                         context_seq_len=context_seq_len,
+                                                         time_window_size=time_window_size,
+                                                         return_logits=return_logits,
+                                                         *args, **kwargs)
+        self.target_time_period = target_time_period
+        self.time_embedding_layer = TimeEmbeddingLayer(vocab_size=self.vocab_size,
+                                                       time_period=self.target_time_period,
+                                                       embedding_size=self.time_window_size,
+                                                       *args, **kwargs)
+
+    def get_config(self):
+        config = super().get_config()
+        config['target_time_period'] = self.target_time_period
+        return config
+
+    def call(self, inputs, **kwargs):
+        """
+
+        :param inputs:
+        :param kwargs:
+        :return:
+        """
+        target_concepts, target_time_stamps, target_time_periods, context_time_stamps, time_mask = inputs
+
+        time_attention_modifier = self.time_embedding_layer([target_concepts, target_time_periods])
+
+        concept_time_attentions = self.embedding_layer(
+            target_concepts) + self.time_attention_bias + time_attention_modifier
+
+        return self.apply_time_attentions(concept_time_attentions, context_time_stamps, target_time_stamps, time_mask)
+
+
 get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'EncoderLayer': EncoderLayer,
     'TimeAttention': TimeAttention,
     'TimeSelfAttention': TimeSelfAttention,
-    'PairwiseTimeAttention': TimeSelfAttention
+    'TimeEmbeddingLayer': TimeEmbeddingLayer,
+    'TimeSensitiveTimeAttention': TimeSensitiveTimeAttention
 })
