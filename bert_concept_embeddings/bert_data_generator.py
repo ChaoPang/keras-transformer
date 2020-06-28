@@ -86,21 +86,28 @@ class BatchGenerator:
         training_example_generator = self.data_generator()
         while True:
             next_bunch_of_examples = islice(training_example_generator, self.batch_size)
-            target_concepts, target_time_stamps, context_concepts, context_time_stamps, labels = zip(
+
+            (target_concepts, target_time_stamps, target_time_periods, context_concepts, context_time_stamps,
+             context_time_periods, labels) = zip(
                 *list(next_bunch_of_examples))
 
             target_concepts = np.asarray(target_concepts)
             target_time_stamps = np.asarray(target_time_stamps)
+            target_time_periods = np.asarray(target_time_periods)
             context_concepts = pad_sequences(context_concepts, maxlen=self.max_sequence_length, padding='post',
                                              value=self.unused_token_id)
             context_time_stamps = pad_sequences(context_time_stamps, maxlen=self.max_sequence_length, padding='post',
                                                 value=0, dtype='float32')
+            context_time_periods = pad_sequences(context_time_periods, maxlen=self.max_sequence_length, padding='post',
+                                                 value=self.unused_token_id)
             mask = (context_concepts == self.unused_token_id).astype(int)
 
             yield ({'target_concepts': target_concepts,
                     'target_time_stamps': target_time_stamps,
+                    'target_time_periods': target_time_periods,
                     'context_concepts': context_concepts,
                     'context_time_stamps': context_time_stamps,
+                    'context_time_periods': context_time_periods,
                     'mask': mask}, labels)
 
     def data_generator(self):
@@ -109,15 +116,24 @@ class BatchGenerator:
             for tup in self.patient_event_sequence.itertuples():
                 concept_ids = tup.token_ids
                 dates = tup.dates
+                periods = tup.periods
                 for i, concept_id in enumerate(concept_ids):
                     left_index = i - half_window_size if i - half_window_size > 0 else 0
                     right_index = i + 1 + half_window_size
                     target_concepts = [concept_id]
                     target_time_stamps = [dates[i]]
+                    target_time_periods = [periods[i]]
                     context_concepts = concept_ids[left_index: i] + concept_ids[i + 1: right_index]
                     context_time_stamps = dates[left_index: i] + dates[i + 1: right_index]
+                    context_time_periods = periods[left_index: i] + periods[i + 1: right_index]
 
-                    yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps, target_concepts)
+                    yield (target_concepts,
+                           target_time_stamps,
+                           target_time_periods,
+                           context_concepts,
+                           context_time_stamps,
+                           context_time_periods,
+                           target_concepts)
 
     def get_steps_per_epoch(self):
         return self.estimate_data_size() // self.batch_size
@@ -205,7 +221,7 @@ class BertBatchGenerator(BatchGenerator):
             mask = (sequence == self.unused_token_id).astype(int)
             combined_label = np.stack([sequence, output_mask], axis=-1)
 
-            yield ({'masked_concept_ids': masked_sequence, 
+            yield ({'masked_concept_ids': masked_sequence,
                     'concept_ids': sequence,
                     'time_stamps': time_stamp_sequence,
                     'mask': mask}, [combined_label])
