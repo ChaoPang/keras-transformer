@@ -178,33 +178,32 @@ class EncoderLayer(tf.keras.layers.Layer):
 
 class TimeEmbeddingLayer(tf.keras.layers.Layer):
     def __init__(self, vocab_size: int,
-                 time_period: int,
+                 time_period_size: int,
                  embedding_size: int,
                  *args,
                  **kwargs):
         super().__init__(*args, **kwargs)
         self.vocab_size = vocab_size
-        self.time_period = time_period
+        self.time_period_size = time_period_size
         self.embedding_size = embedding_size
 
-        self.time_embedding_layer = tf.keras.layers.Embedding(self.vocab_size * self.time_period, self.embedding_size,
+        self.time_embedding_layer = tf.keras.layers.Embedding(self.vocab_size * self.time_period_size,
+                                                              self.embedding_size,
                                                               embeddings_initializer=tf.keras.initializers.zeros,
                                                               name='time_embedding_layer')
 
     def get_config(self):
         config = super().get_config()
         config['vocab_size'] = self.vocab_size
-        config['time_period'] = self.time_period
+        config['time_period_size'] = self.time_period_size
         config['embedding_size'] = self.embedding_size
         return config
 
     def call(self, inputs, **kwargs):
         # Shape = (batch_size, seq_len)
-        concept_ids = inputs[0]
+        concept_ids, time_periods = inputs
         # Shape = (batch_size, seq_len)
-        time_periods = inputs[1]
-        # Shape = (batch_size, seq_len)
-        time_specific_concept_ids = time_periods * self.vocab_size + concept_ids
+        time_specific_concept_ids = time_periods * self.time_period_size + concept_ids
 
         # Shape (batch_size, seq_len, embedding_size)
         time_period_bias = self.time_embedding_layer(time_specific_concept_ids)
@@ -213,7 +212,7 @@ class TimeEmbeddingLayer(tf.keras.layers.Layer):
 
     def get_time_period_weights(self):
         return tf.transpose(tf.reshape(self.time_embedding_layer.get_weights()[0],
-                                       (self.vocab_size, self.time_period, self.embedding_size)), perm=[1, 0, 2])
+                                       (self.vocab_size, self.time_period_size, self.embedding_size)), perm=[1, 0, 2])
 
 
 class TimeAttention(tf.keras.layers.Layer):
@@ -313,7 +312,7 @@ class TimeSensitiveTimeAttention(TimeAttention):
 
     def __init__(self, vocab_size: int,
                  target_seq_len: int,
-                 target_time_period: int,
+                 target_time_period_size: int,
                  context_seq_len: int,
                  time_window_size: int,
                  return_logits: bool = False, *args, **kwargs):
@@ -323,15 +322,15 @@ class TimeSensitiveTimeAttention(TimeAttention):
                                                          time_window_size=time_window_size,
                                                          return_logits=return_logits,
                                                          *args, **kwargs)
-        self.target_time_period = target_time_period
+        self.target_time_period_size = target_time_period_size
         self.time_embedding_layer = TimeEmbeddingLayer(vocab_size=self.vocab_size,
-                                                       time_period=self.target_time_period,
+                                                       time_period_size=self.target_time_period_size,
                                                        embedding_size=self.time_window_size,
                                                        *args, **kwargs)
 
     def get_config(self):
         config = super().get_config()
-        config['target_time_period'] = self.target_time_period
+        config['target_time_period_size'] = self.target_time_period_size
         return config
 
     def call(self, inputs, **kwargs):

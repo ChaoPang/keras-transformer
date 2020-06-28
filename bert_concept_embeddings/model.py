@@ -5,7 +5,8 @@ import tensorflow as tf
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.position import TransformerCoordinateEmbedding
 
-from bert_concept_embeddings.custom_layers import EncoderLayer, TimeSelfAttention, TimeAttention, TimeEmbeddingLayer
+from bert_concept_embeddings.custom_layers import (EncoderLayer, TimeSelfAttention, TimeAttention, TimeEmbeddingLayer,
+                                                   TimeSensitiveTimeAttention)
 
 
 def time_attention_cbow_negative_sampling_model(max_seq_length: int,
@@ -71,13 +72,14 @@ def time_attention_cbow_model(max_seq_length: int,
                               vocabulary_size: int,
                               concept_embedding_size: int,
                               time_window_size: int,
-                              time_period: int):
+                              time_period_size: int):
     """
 
     :param max_seq_length:
     :param vocabulary_size:
     :param concept_embedding_size:
     :param time_window_size:
+    :param time_period_size:
     :return:
     """
     target_concepts = tf.keras.layers.Input(shape=(1,), dtype='int32', name='target_concepts')
@@ -98,17 +100,14 @@ def time_attention_cbow_model(max_seq_length: int,
                                                 mask_zero=True)
 
     time_sensitive_embedding_layer = TimeEmbeddingLayer(vocab_size=vocabulary_size,
-                                                        time_period=time_period,
+                                                        time_period_size=time_period_size,
                                                         embedding_size=concept_embedding_size)
 
-    time_attention_layer = TimeAttention(vocab_size=vocabulary_size,
-                                         target_seq_len=1,
-                                         context_seq_len=max_seq_length,
-                                         time_window_size=time_window_size)
-
-    time_sensitive_time_attention_layer = TimeEmbeddingLayer(vocab_size=vocabulary_size,
-                                                             time_period=time_period,
-                                                             embedding_size=time_window_size)
+    time_attention_layer = TimeSensitiveTimeAttention(vocab_size=vocabulary_size,
+                                                      target_seq_len=1,
+                                                      target_time_period_size=time_period_size,
+                                                      context_seq_len=max_seq_length,
+                                                      time_window_size=time_window_size)
 
     dense_layer = tf.keras.layers.Dense(vocabulary_size)
 
@@ -119,15 +118,14 @@ def time_attention_cbow_model(max_seq_length: int,
         [context_concepts, context_time_periods])
 
     # shape = (batch_size, 1, seq_len)
-    time_embeddings = time_attention_layer([target_concepts,
+    time_attentions = time_attention_layer([target_concepts,
                                             target_time_stamps,
+                                            target_time_periods,
                                             context_time_stamps,
                                             mask])
 
-    time_sensitive_time_attention_layer([target_concepts, target_time_periods])
-
     # shape = (batch_size, 1, embedding_size)
-    combined_embeddings = tf.matmul(time_embeddings, concept_embeddings)
+    combined_embeddings = tf.matmul(time_attentions, concept_embeddings)
 
     # shape = (batch_size, 1, vocab_size)
     concept_predictions = softmax_layer(dense_layer(combined_embeddings))
