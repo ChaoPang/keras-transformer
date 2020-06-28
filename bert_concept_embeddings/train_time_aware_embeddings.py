@@ -102,7 +102,8 @@ def train(model_path,
             model = time_attention_cbow_model(max_seq_length=max_seq_length,
                                               vocabulary_size=vocabulary_size,
                                               concept_embedding_size=concept_embedding_size,
-                                              time_window_size=time_window_size)
+                                              time_window_size=time_window_size,
+                                              time_period_size=2)
             model.compile(
                 optimizer,
                 loss=tf.keras.losses.SparseCategoricalCrossentropy(),

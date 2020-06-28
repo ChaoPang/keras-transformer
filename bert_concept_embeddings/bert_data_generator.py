@@ -99,7 +99,7 @@ class BatchGenerator:
             context_time_stamps = pad_sequences(context_time_stamps, maxlen=self.max_sequence_length, padding='post',
                                                 value=0, dtype='float32')
             context_time_periods = pad_sequences(context_time_periods, maxlen=self.max_sequence_length, padding='post',
-                                                 value=self.unused_token_id)
+                                                 value=0)
             mask = (context_concepts == self.unused_token_id).astype(int)
 
             yield ({'target_concepts': target_concepts,
