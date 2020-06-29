@@ -203,7 +203,7 @@ class TimeEmbeddingLayer(tf.keras.layers.Layer):
         # Shape = (batch_size, seq_len)
         concept_ids, time_periods = inputs
         # Shape = (batch_size, seq_len)
-        time_specific_concept_ids = time_periods * self.time_period_size + concept_ids
+        time_specific_concept_ids = time_periods * self.vocab_size + concept_ids
 
         # Shape (batch_size, seq_len, embedding_size)
         time_period_bias = self.time_embedding_layer(time_specific_concept_ids)

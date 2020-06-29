@@ -38,7 +38,10 @@ def process_raw_input(raw_input_data_path, training_data_path):
         event_dates = patient_event_sequence.sort_values(['person_id', 'visit_rank_order']) \
             .groupby('person_id')['dates'].apply(lambda x: list(itertools.chain(*x))).reset_index()
 
-        training_data = patient_concept_ids.merge(patient_visit_ids).merge(event_dates)
+        event_periods = patient_event_sequence.sort_values(['person_id', 'visit_rank_order']) \
+            .groupby('person_id')['periods'].apply(lambda x: list(itertools.chain(*x))).reset_index()
+
+        training_data = patient_concept_ids.merge(patient_visit_ids).merge(event_dates).merge(event_periods)
         training_data = training_data[training_data['concept_ids'].apply(len) > 1]
         training_data.to_pickle(training_data_path)
 
@@ -243,4 +246,4 @@ if __name__ == "__main__":
                         default='./logs',
                         required=False)
 
-    main(parser.parse_args())
+main(parser.parse_args())
