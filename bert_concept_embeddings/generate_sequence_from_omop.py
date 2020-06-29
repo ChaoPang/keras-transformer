@@ -7,7 +7,7 @@ from pyspark.sql import functions as F
 
 from bert_concept_embeddings.common import *
 
-input_folder = '/data/research_ops/omops/ohdsi_covid/'
+input_folder = '/data/research_ops/omops/omop_2020q1/'
 
 domain_tables = []
 for domain_table_name in ['condition_occurrence', 'drug_exposure']:
@@ -26,16 +26,20 @@ take_second = F.udf(lambda rows: [str(row[1]) for row in sorted(rows, key=lambda
 
 patient_event \
     .where(F.col('date') >= '1980-01-01') \
+    .withColumn('period', (F.col('date') >= '2020-01-01').cast('int')) \
     .withColumn('date', (F.unix_timestamp('date') / F.lit(24 * 60 * 60 * 7)).cast('int')) \
     .withColumn('earliest_visit_date', F.min('date').over(Window.partitionBy('visit_occurrence_id'))) \
     .withColumn('date_concept_id', F.struct(F.col('date'), F.col('standard_concept_id'))) \
+    .withColumn('date_period', F.struct(F.col('date'), F.col('period'))) \
     .groupBy('person_id', 'visit_occurrence_id') \
     .agg(F.collect_set('date_concept_id').alias('date_concept_id'),
+         F.collect_list('date_period').alias('date_period'),
          F.first('earliest_visit_date').alias('earliest_visit_date')) \
     .withColumn('concept_ids', take_second('date_concept_id')) \
+    .withColumn('periods', take_second('date_period')) \
     .withColumn('dates', take_first('date_concept_id')) \
     .withColumn('visit_rank_order', F.dense_rank().over(Window.partitionBy('person_id').orderBy('earliest_visit_date'))) \
-    .select('person_id', 'visit_occurrence_id', 'visit_rank_order', 'earliest_visit_date', 'dates', 'concept_ids') \
+    .select('person_id', 'visit_occurrence_id', 'visit_rank_order', 'earliest_visit_date', 'dates', 'periods', 'concept_ids') \
     .write.mode('overwrite').parquet(os.path.join(input_folder, 'visit_event_sequence_v2'))
 
 patient_event \
