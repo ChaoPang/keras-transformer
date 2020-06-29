@@ -154,8 +154,10 @@ def main(args):
     dataset = tf.data.Dataset.from_generator(batch_generator.batch_generator,
                                              output_types=({'target_concepts': tf.int32,
                                                             'target_time_stamps': tf.float32,
+                                                            'target_time_periods': tf.float32,
                                                             'context_concepts': tf.int32,
                                                             'context_time_stamps': tf.float32,
+                                                            'context_time_periods': tf.float32,
                                                             'mask': tf.int32}, tf.int32))
 
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE).shuffle(True)
