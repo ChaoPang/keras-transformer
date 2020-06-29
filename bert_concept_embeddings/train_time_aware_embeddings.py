@@ -237,7 +237,7 @@ if __name__ == "__main__":
                         '--learning_rate',
                         dest='learning_rate',
                         action='store',
-                        type=int,
+                        type=float,
                         default=2e-4,
                         required=False)
 
