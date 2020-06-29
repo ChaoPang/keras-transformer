@@ -44,14 +44,14 @@ def scaled_dot_product_attention(q, k, v, mask, time_attention_logits=None):
     """Calculate the attention weights.
     q, k, v must have matching leading dimensions.
     k, v must have matching penultimate dimension, i.e.: seq_len_k = seq_len_v.
-    The mask has different shapes depending on its type(padding or look ahead) 
+    The mask has different shapes depending on its type(padding or look ahead)
     but it must be broadcastable for addition.
 
     Args:
     q: query shape == (..., seq_len_q, depth)
     k: key shape == (..., seq_len_k, depth)
     v: value shape == (..., seq_len_v, depth_v)
-    mask: Float tensor with shape broadcastable 
+    mask: Float tensor with shape broadcastable
           to (..., seq_len_q, seq_len_k). Defaults to None.
 
     Returns:
@@ -238,7 +238,7 @@ class TimeAttention(tf.keras.layers.Layer):
 
         self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size,
                                                          self.time_window_size,
-                                                         embeddings_initializer=tf.keras.initializers.RandomNormal(
+                                                         embeddings_initializer=tf.keras.initializers.RandomUniform(
                                                              minval=0., maxval=0.1),
                                                          name='time_attention_embedding')
         self.time_attention_bias = self.add_weight(name='time_attention_bias',
