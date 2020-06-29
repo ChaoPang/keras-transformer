@@ -344,8 +344,8 @@ class TimeSensitiveTimeAttention(TimeAttention):
 
         time_attention_modifier = self.time_embedding_layer([target_concepts, target_time_periods])
 
-        concept_time_attentions = self.embedding_layer(
-            target_concepts) + self.time_attention_bias + time_attention_modifier
+        concept_time_attentions = (self.embedding_layer(
+            target_concepts) + self.time_attention_bias) * time_attention_modifier
 
         return self.apply_time_attentions(concept_time_attentions, context_time_stamps, target_time_stamps, time_mask)
 

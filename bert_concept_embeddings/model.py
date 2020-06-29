@@ -114,7 +114,7 @@ def time_attention_cbow_model(max_seq_length: int,
     softmax_layer = tf.keras.layers.Softmax()
 
     # shape = (batch_size, seq_len, embedding_size)
-    concept_embeddings = embedding_layer(context_concepts) + time_sensitive_embedding_layer(
+    concept_embeddings = embedding_layer(context_concepts) * time_sensitive_embedding_layer(
         [context_concepts, context_time_periods])
 
     if mask is not None:
