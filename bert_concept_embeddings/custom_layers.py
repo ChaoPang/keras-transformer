@@ -238,7 +238,7 @@ class TimeAttention(tf.keras.layers.Layer):
 
         self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size,
                                                          self.time_window_size,
-                                                         embeddings_initializer=tf.keras.initializers.Constant(
+                                                         embeddings_initializer=tf.keras.initializers.RandomNormal(
                                                              minval=0., maxval=0.1),
                                                          name='time_attention_embedding')
         self.time_attention_bias = self.add_weight(name='time_attention_bias',
