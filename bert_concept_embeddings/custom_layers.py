@@ -237,11 +237,11 @@ class TimeAttention(tf.keras.layers.Layer):
         self.return_logits = return_logits
 
         self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size, self.time_window_size,
-                                                         embeddings_initializer=tf.keras.initializers.zeros,
+                                                         embeddings_initializer=tf.keras.initializers.glorot_uniform,
                                                          name='time_attention_embedding')
         self.time_attention_bias = self.add_weight(name='time_attention_bias',
                                                    shape=self.time_window_size,
-                                                   initializer=tf.keras.initializers.zeros,
+                                                   initializer=tf.keras.initializers.glorot_uniform,
                                                    trainable=True)
 
         self.softmax_layer = tf.keras.layers.Softmax()
