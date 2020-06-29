@@ -208,7 +208,7 @@ class TimeEmbeddingLayer(tf.keras.layers.Layer):
         # Shape (batch_size, seq_len, embedding_size)
         time_period_bias = self.time_embedding_layer(time_specific_concept_ids)
 
-        return tf.keras.activations.selu(time_period_bias)
+        return tf.keras.activations.relu(time_period_bias)
 
     def get_time_period_weights(self):
         return tf.transpose(tf.reshape(self.time_embedding_layer.get_weights()[0],
@@ -236,7 +236,10 @@ class TimeAttention(tf.keras.layers.Layer):
         self.time_window_size = self.half_window_size * 2 + 1
         self.return_logits = return_logits
 
-        self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size, self.time_window_size,
+        self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size,
+                                                         self.time_window_size,
+                                                         embeddings_initializer=tf.keras.initializers.Constant(
+                                                             value=0.1),
                                                          name='time_attention_embedding')
         self.time_attention_bias = self.add_weight(name='time_attention_bias',
                                                    shape=self.time_window_size,
