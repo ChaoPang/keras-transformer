@@ -5,6 +5,7 @@ from typing import List, Callable, Optional, Sequence
 
 import numpy as np
 from scipy.stats import norm
+from scipy.special import softmax
 # noinspection PyPep8Naming
 from keras import backend as K
 from keras.utils import get_custom_objects
@@ -207,7 +208,7 @@ class BatchGenerator:
 
         time_buckets = np.asarray(list(range(-half_time_window, half_time_window + 1)))
         normalized_time_buckets = (time_buckets - time_buckets.mean()) / time_buckets.std()
-        time_buckets_probability = norm.pdf(normalized_time_buckets)
+        time_buckets_probability = softmax(norm.pdf(normalized_time_buckets))
 
         while True:
             for tup in self.patient_event_sequence.itertuples():
