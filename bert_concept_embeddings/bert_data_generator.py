@@ -4,6 +4,7 @@ from itertools import islice, chain
 from typing import List, Callable, Optional, Sequence
 
 import numpy as np
+from scipy.stats import norm
 # noinspection PyPep8Naming
 from keras import backend as K
 from keras.utils import get_custom_objects
@@ -16,7 +17,6 @@ BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
 
 
 class ConceptTokenizer:
-
     unused_token = ['[UNUSED]']
 
     def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='0'):
@@ -171,12 +171,14 @@ class BatchGenerator:
     def __init__(self, patient_event_sequence,
                  unused_token_id: int,
                  max_sequence_length: int,
-                 batch_size: int):
+                 batch_size: int,
+                 time_window_size: int = 100):
 
         self.patient_event_sequence = patient_event_sequence
         self.batch_size = batch_size
         self.max_sequence_length = max_sequence_length
         self.unused_token_id = unused_token_id
+        self.time_window_size = time_window_size
 
     def batch_generator(self):
         training_example_generator = self.data_generator()
@@ -201,6 +203,12 @@ class BatchGenerator:
 
     def data_generator(self):
         half_window_size = int(self.max_sequence_length / 2)
+        half_time_window = int(self.time_window_size / 2)
+
+        time_buckets = np.asarray(list(range(-half_time_window, half_time_window + 1)))
+        normalized_time_buckets = (time_buckets - time_buckets.mean()) / time_buckets.std()
+        time_buckets_probability = norm.pdf(normalized_time_buckets)
+
         while True:
             for tup in self.patient_event_sequence.itertuples():
                 concept_ids = tup.token_ids
@@ -210,8 +218,11 @@ class BatchGenerator:
                     right_index = i + 1 + half_window_size
                     target_concepts = [concept_id]
                     target_time_stamps = [dates[i]]
-                    context_concepts = concept_ids[left_index: i] + concept_ids[i + 1: right_index]
-                    context_time_stamps = dates[left_index: i] + dates[i + 1: right_index]
+                    context_concepts = np.asarray(concept_ids[left_index: i] + concept_ids[i + 1: right_index])
+                    context_time_stamps = np.asarray(dates[left_index: i] + dates[i + 1: right_index])
+                    context_time_stamps = np.asarray(context_time_stamps) + np.random.choice(time_buckets,
+                                                                                             size=context_time_stamps,
+                                                                                             p=time_buckets_probability)
 
                     yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps, target_concepts)
 
