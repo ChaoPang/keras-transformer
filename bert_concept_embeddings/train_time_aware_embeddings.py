@@ -218,7 +218,8 @@ if __name__ == "__main__":
     batch_generator = BatchGenerator(patient_event_sequence=training_data,
                                      max_sequence_length=args.max_seq_length,
                                      batch_size=args.batch_size,
-                                     unused_token_id=unused_token_id)
+                                     unused_token_id=unused_token_id,
+                                     time_window_size=args.time_window_size)
 
     dataset = tf.data.Dataset.from_generator(batch_generator.batch_generator,
                                              output_types=({'target_concepts': tf.int32,
