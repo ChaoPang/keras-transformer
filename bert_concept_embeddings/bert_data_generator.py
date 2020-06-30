@@ -4,19 +4,15 @@ from itertools import islice, chain
 from typing import List, Callable, Optional, Sequence
 
 import numpy as np
-# noinspection PyPep8Naming
-from keras import backend as K
-from keras.utils import get_custom_objects
-# -
+import pandas as pd
 
-from keras.preprocessing.text import Tokenizer
-from keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
 
 
 class ConceptTokenizer:
-
     unused_token = ['[UNUSED]']
 
     def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='0'):
@@ -170,13 +166,21 @@ class BatchGenerator:
 
     def __init__(self, patient_event_sequence,
                  unused_token_id: int,
+                 first_token_id: int,
+                 last_token_id: int,
                  max_sequence_length: int,
-                 batch_size: int):
+                 batch_size: int,
+                 time_window_size: int = 100,
+                 max_concepts_per_time_bucket: int = 5):
 
         self.patient_event_sequence = patient_event_sequence
         self.batch_size = batch_size
         self.max_sequence_length = max_sequence_length
+        self.first_token_id = first_token_id
+        self.last_token_id = last_token_id
         self.unused_token_id = unused_token_id
+        self.time_window_size = time_window_size
+        self.max_concepts_per_time_bucket = max_concepts_per_time_bucket
 
     def batch_generator(self):
         training_example_generator = self.data_generator()
@@ -200,26 +204,98 @@ class BatchGenerator:
                     'mask': mask}, labels)
 
     def data_generator(self):
-        half_window_size = int(self.max_sequence_length / 2)
         while True:
             for tup in self.patient_event_sequence.itertuples():
-                concept_ids = tup.token_ids
-                dates = tup.dates
+                concept_ids, dates = zip(*sorted(zip(tup.token_ids, tup.dates), key=lambda tup2: tup2[1]))
                 for i, concept_id in enumerate(concept_ids):
-                    left_index = i - half_window_size if i - half_window_size > 0 else 0
-                    right_index = i + 1 + half_window_size
-                    target_concepts = [concept_id]
+                    target_concepts = [concept_ids[i]]
                     target_time_stamps = [dates[i]]
-                    context_concepts = concept_ids[left_index: i] + concept_ids[i + 1: right_index]
-                    context_time_stamps = dates[left_index: i] + dates[i + 1: right_index]
 
-                    yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps, target_concepts)
+                    left_iterator = zip(reversed(dates[:i]), reversed(concept_ids[:i]))
+                    right_iterator = zip(dates[i + 1:], concept_ids[i + 1:])
+                    context = self.create_context(dates[i], left_iterator) + self.create_context(
+                        dates[i], right_iterator)
 
-    def get_steps_per_epoch(self):
-        return self.estimate_data_size() // self.batch_size
+                    if len(context) > 0:
+                        context_concepts, context_time_stamps = zip(*context)
+                        context_concepts = list(context_concepts)
+                        context_time_stamps = list(context_time_stamps)
 
-    def estimate_data_size(self):
-        return len(self.patient_event_sequence.token_ids.explode())
+                        context_concepts, context_time_stamps = self.pad_context(dates[i], context_concepts,
+                                                                                 context_time_stamps)
+
+                        yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps,
+                               target_concepts)
+
+    def pad_context(self, target_time_stamp, context_concepts, context_time_stamps):
+
+        if self.max_sequence_length > len(context_time_stamps):
+            half_time_window_size = int(self.time_window_size / 2)
+            missing_time_buckets = np.setdiff1d(
+                list(range(-half_time_window_size + target_time_stamp, target_time_stamp + half_time_window_size + 1)),
+                set(context_time_stamps),
+                True)
+            random_concept_ids = np.random.randint(self.first_token_id, self.last_token_id + 1,
+                                                   self.max_sequence_length - len(context_time_stamps))
+            context_time_stamps = np.concatenate([context_time_stamps, missing_time_buckets])
+            context_concepts = np.concatenate([context_concepts, random_concept_ids])
+        return context_concepts, context_time_stamps
+
+    def create_context(self, target_time_stamp, window_iterator):
+
+        half_time_window_size = int(self.time_window_size / 2)
+        context = []
+        counter = 0
+        for context_time_stamp, context_concept in window_iterator:
+            time_delta = abs(target_time_stamp - context_time_stamp)
+
+            if time_delta > half_time_window_size:
+                break
+
+            if random.random() > 0.5:
+
+                if len(context) == 0:
+                    context.append((context_concept, context_time_stamp))
+                    counter += 1
+                    continue
+
+                # Check if the previous time delta is the same as the current time delta
+                # If not the same, we reset counter to zero
+                if context[-1][1] != context_time_stamp:
+                    counter = 0
+
+                if counter <= self.max_concepts_per_time_bucket:
+                    context.append((context_concept, context_time_stamp))
+                    counter += 1
+
+        return context
+
+
+# def pad_context(self, context_concepts, context_time_stamps):
+#     date_concepts_pd = pd.DataFrame(zip(context_time_stamps, context_concepts),
+#                                     columns=['dates', 'concept_ids'])
+#     date_concepts_pd['rand_num'] = np.random.rand(date_concepts_pd.shape[0])
+#     date_concepts_pd['rank'] = date_concepts_pd.groupby('dates')['rand_num'].rank(
+#         method='first').astype(int)
+#     date_concepts_pd = date_concepts_pd[date_concepts_pd['rank'] <= self.max_concepts_per_time_bucket]
+#     context_time_stamps = date_concepts_pd['dates'].to_numpy()
+#     context_concepts = date_concepts_pd['concept_ids'].to_numpy()
+#     half_time_window_size = int(self.time_window_size / 2)
+#     missing_time_buckets = np.setdiff1d(list(range(-half_time_window_size, half_time_window_size + 1)),
+#                                         date_concepts_pd['dates'].unique(),
+#                                         True)
+#     random_concept_ids = np.random.randint(self.first_token_id, self.last_token_id + 1,
+#                                            self.max_sequence_length - len(context_time_stamps))
+#     context_time_stamps = np.concatenate(context_time_stamps, missing_time_buckets)
+#     context_concepts = np.concatenate(context_concepts, random_concept_ids)
+#     return context_concepts, context_time_stamps
+
+def get_steps_per_epoch(self):
+    return self.estimate_data_size() // self.batch_size
+
+
+def estimate_data_size(self):
+    return len(self.patient_event_sequence.token_ids.explode())
 
 
 class NegativeSamplingBatchGenerator(BatchGenerator):
