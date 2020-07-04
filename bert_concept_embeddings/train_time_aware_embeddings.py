@@ -38,10 +38,7 @@ def process_raw_input(raw_input_data_path, training_data_path):
         event_dates = patient_event_sequence.sort_values(['person_id', 'visit_rank_order']) \
             .groupby('person_id')['dates'].apply(lambda x: list(itertools.chain(*x))).reset_index()
 
-        event_periods = patient_event_sequence.sort_values(['person_id', 'visit_rank_order']) \
-            .groupby('person_id')['periods'].apply(lambda x: list(itertools.chain(*x))).reset_index()
-
-        training_data = patient_concept_ids.merge(patient_visit_ids).merge(event_dates).merge(event_periods)
+        training_data = patient_concept_ids.merge(patient_visit_ids).merge(event_dates)
         training_data = training_data[training_data['concept_ids'].apply(len) > 1]
         training_data.to_pickle(training_data_path)
 
@@ -105,8 +102,7 @@ def train(model_path,
             model = time_attention_cbow_model(max_seq_length=max_seq_length,
                                               vocabulary_size=vocabulary_size,
                                               concept_embedding_size=concept_embedding_size,
-                                              time_window_size=time_window_size,
-                                              time_period_size=2)
+                                              time_window_size=time_window_size)
             model.compile(
                 optimizer,
                 loss=tf.keras.losses.SparseCategoricalCrossentropy(),
@@ -154,10 +150,8 @@ def main(args):
     dataset = tf.data.Dataset.from_generator(batch_generator.batch_generator,
                                              output_types=({'target_concepts': tf.int32,
                                                             'target_time_stamps': tf.float32,
-                                                            'target_time_periods': tf.float32,
                                                             'context_concepts': tf.int32,
                                                             'context_time_stamps': tf.float32,
-                                                            'context_time_periods': tf.float32,
                                                             'mask': tf.int32}, tf.int32))
 
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE).shuffle(True)
