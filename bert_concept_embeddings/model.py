@@ -102,6 +102,9 @@ def time_attention_cbow_model(max_seq_length: int,
     # shape = (batch_size, seq_len, embedding_size)
     concept_embeddings = embedding_layer(context_concepts)
 
+    if mask is not None:
+        concept_embeddings = concept_embeddings * tf.cast(tf.expand_dims(mask == 0, axis=-1), dtype=tf.float32)
+
     # shape = (batch_size, 1, seq_len)
     time_embeddings = time_embedding_layer([target_concepts,
                                             target_time_stamps,
