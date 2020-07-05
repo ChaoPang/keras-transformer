@@ -138,6 +138,8 @@ def main(args):
     model_path = os.path.join(args.output_folder, 'model_time_aware_embeddings.h5')
 
     training_data = process_raw_input(raw_input_data_path, training_data_path)
+    # shuffle the training data     
+    training_data = training_data.sample(frac=1).reset_index(drop=True)
 
     tokenizer, training_data = tokenize_concept_sequences(training_data, tokenizer_path)
     unused_token_id = tokenizer.get_unused_token_id()
@@ -154,7 +156,8 @@ def main(args):
                                                             'context_time_stamps': tf.float32,
                                                             'mask': tf.int32}, tf.int32))
 
-    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE).shuffle(True)
+    dataset = dataset.take(batch_generator.get_steps_per_epoch()).cache(os.path.join(args.output_folder, 'cached_data')).repeat()
+    dataset = dataset.shuffle(10).prefetch(tf.data.experimental.AUTOTUNE)
 
     train(model_path=model_path,
           dataset=dataset,
@@ -163,10 +166,10 @@ def main(args):
           concept_embedding_size=args.concept_embedding_size,
           vocabulary_size=tokenizer.get_vocab_size(),
           epochs=args.epochs,
-          steps_per_epoch=batch_generator.get_steps_per_epoch(),
+          steps_per_epoch=batch_generator.get_steps_per_epoch() + 1,
           learning_rate=args.learning_rate,
-          val_dataset=dataset,
-          val_steps_per_epoch=10,
+          val_dataset=dataset.shard(10, 1),
+          val_steps_per_epoch=100,
           tf_board_log_path=args.tf_board_log_path)
 
 
@@ -241,5 +244,5 @@ if __name__ == "__main__":
                         action='store',
                         default='./logs',
                         required=False)
-
-main(parser.parse_args())
+    
+    main(parser.parse_args())
