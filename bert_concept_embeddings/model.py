@@ -99,9 +99,9 @@ def time_attention_cbow_model(max_seq_length: int,
     embedding_layer = tf.keras.layers.Embedding(vocabulary_size, concept_embedding_size, name='embedding_layer',
                                                 mask_zero=True)
 
-    # time_sensitive_embedding_layer = TimeEmbeddingLayer(vocab_size=vocabulary_size,
-    #                                                     time_period_size=time_period_size,
-    #                                                     embedding_size=concept_embedding_size)
+    time_sensitive_embedding_layer = TimeEmbeddingLayer(vocab_size=vocabulary_size,
+                                                        time_period_size=time_period_size,
+                                                        embedding_size=concept_embedding_size)
 
     time_attention_layer = TimeSensitiveTimeAttention(vocab_size=vocabulary_size,
                                                       target_seq_len=1,
@@ -114,7 +114,7 @@ def time_attention_cbow_model(max_seq_length: int,
     softmax_layer = tf.keras.layers.Softmax()
 
     # shape = (batch_size, seq_len, embedding_size)
-    concept_embeddings = embedding_layer(context_concepts)
+    concept_embeddings = embedding_layer(context_concepts)  + time_sensitive_embedding_layer([context_concepts, context_time_periods])
 
     if mask is not None:
         concept_embeddings = concept_embeddings * tf.cast(tf.expand_dims(mask == 0, axis=-1), dtype=tf.float32)
