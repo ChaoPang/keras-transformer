@@ -6,8 +6,6 @@ import pickle
 
 import pandas as pd
 import numpy as np
-from scipy.stats import norm
-from scipy.special import softmax
 
 from bert_concept_embeddings.custom_layers import get_custom_objects
 from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BatchGenerator
@@ -42,7 +40,10 @@ def process_raw_input(raw_input_data_path, training_data_path):
         event_dates = patient_event_sequence.sort_values(['person_id', 'visit_rank_order']) \
             .groupby('person_id')['dates'].apply(lambda x: list(itertools.chain(*x))).reset_index()
 
-        training_data = patient_concept_ids.merge(patient_visit_ids).merge(event_dates)
+        event_periods = patient_event_sequence.sort_values(['person_id', 'visit_rank_order']) \
+            .groupby('person_id')['periods'].apply(lambda x: list(itertools.chain(*x))).reset_index()
+
+        training_data = patient_concept_ids.merge(patient_visit_ids).merge(event_dates).merge(event_periods)
         training_data = training_data[training_data['concept_ids'].apply(len) > 1]
         training_data.to_pickle(training_data_path)
 
@@ -67,14 +68,16 @@ def tokenize_concept_sequences(training_data, tokenizer_path):
 
 def random_mutate_time_stamps(inputs, label, batch_size, context_window_size, week_threshold=2, scale=1.0):
     context_time_stamps = inputs['context_time_stamps']
-    
+
     dist = tfp.distributions.Normal(loc=0., scale=scale)
-    
+
     time_bucket_mutations = np.asarray(list(range(-week_threshold, week_threshold + 1)))
     time_buckets_probability = dist.prob(time_bucket_mutations.astype(float))
     time_buckets_probability = time_buckets_probability / tf.reduce_sum(time_buckets_probability)
-    
-    random_mutation = tf.random.categorical(tf.tile(tf.expand_dims(time_buckets_probability, axis=0),  tf.constant([batch_size, 1])), context_window_size) - week_threshold
+
+    random_mutation = tf.random.categorical(
+        tf.tile(tf.expand_dims(time_buckets_probability, axis=0), tf.constant([batch_size, 1])),
+        context_window_size) - week_threshold
     inputs['context_time_stamps'] = context_time_stamps + tf.cast(random_mutation, dtype=tf.float32)
     return inputs, label
 
@@ -120,7 +123,8 @@ def train(model_path,
             model = time_attention_cbow_model(max_seq_length=max_seq_length,
                                               vocabulary_size=vocabulary_size,
                                               concept_embedding_size=concept_embedding_size,
-                                              time_window_size=time_window_size)
+                                              time_window_size=time_window_size,
+                                              time_period_size=2)
             model.compile(
                 optimizer,
                 loss=tf.keras.losses.SparseCategoricalCrossentropy(),
@@ -156,7 +160,7 @@ def main(args):
     model_path = os.path.join(args.output_folder, 'model_time_aware_embeddings.h5')
 
     training_data = process_raw_input(raw_input_data_path, training_data_path)
-    # shuffle the training data     
+    # shuffle the training data
     training_data = training_data.sample(frac=1).reset_index(drop=True)
 
     tokenizer, training_data = tokenize_concept_sequences(training_data, tokenizer_path)
@@ -170,18 +174,14 @@ def main(args):
     dataset = tf.data.Dataset.from_generator(batch_generator.batch_generator,
                                              output_types=({'target_concepts': tf.int32,
                                                             'target_time_stamps': tf.float32,
+                                                            'target_time_periods': tf.float32,
                                                             'context_concepts': tf.int32,
                                                             'context_time_stamps': tf.float32,
+                                                            'context_time_periods': tf.float32,
                                                             'mask': tf.int32}, tf.int32))
-    
+
     dataset = dataset.take(batch_generator.get_steps_per_epoch()).cache().repeat()
     dataset = dataset.shuffle(5).prefetch(tf.data.experimental.AUTOTUNE)
-    dataset = dataset.map(lambda inputs, label: random_mutate_time_stamps(inputs, 
-                                                                          label, 
-                                                                          args.batch_size, 
-                                                                          args.max_seq_length,
-                                                                          5, 2.0),
-                          num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     train(model_path=model_path,
           dataset=dataset,
@@ -268,5 +268,5 @@ if __name__ == "__main__":
                         action='store',
                         default='./logs',
                         required=False)
-    
+
     main(parser.parse_args())

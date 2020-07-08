@@ -7,12 +7,14 @@ import numpy as np
 
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
+from numpy.core._multiarray_umath import ndarray
 
 BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
 
 
 class ConceptTokenizer:
     unused_token = ['[UNUSED]']
+    mask_token = ['[MASK]']
 
     def __init__(self, special_tokens: Optional[Sequence[str]] = None, oov_token='0'):
         self.special_tokens = special_tokens
@@ -20,6 +22,7 @@ class ConceptTokenizer:
 
     def fit_on_concept_sequences(self, concept_sequences):
         self.tokenizer.fit_on_texts(concept_sequences)
+        self.tokenizer.fit_on_texts(self.mask_token)
         self.tokenizer.fit_on_texts(self.unused_token)
         if self.special_tokens is not None:
             self.tokenizer.fit_on_texts(self.special_tokens)
@@ -53,112 +56,15 @@ class ConceptTokenizer:
 
     def get_unused_token_id(self):
         unused_token_id = self.encode(self.unused_token)
-        return unused_token_id[0] if isinstance(unused_token_id, list) else unused_token_id
+        while isinstance(unused_token_id, list):
+            unused_token_id = unused_token_id[0]
+        return unused_token_id
 
-
-class BatchGeneratorVisitBased:
-    """
-    This class generates batches for a BERT-based language model
-    in an abstract way, by using an external function sampling
-    sequences of token IDs of a given length.
-    """
-
-    def __init__(self, concept_sequences,
-                 mask_token_id: int,
-                 unused_token_id: int,
-                 max_sequence_length: int,
-                 batch_size: int,
-                 first_normal_token_id: int,
-                 last_normal_token_id: int):
-
-        self.concept_sequences = concept_sequences
-        self.data_size = len(concept_sequences)
-        self.steps_per_epoch = (
-            # We sample the dataset randomly. So we can make only a crude
-            # estimation of how many steps it should take to cover most of it.
-                self.data_size // batch_size)
-        self.batch_size = batch_size
-        self.max_sequence_length = max_sequence_length
-        self.mask_token_id = mask_token_id
-        self.unused_token_id = unused_token_id
-        self.first_token_id = first_normal_token_id
-        self.last_token_id = last_normal_token_id
-        self.index = 0
-
-    def generate_batches(self):
-        """
-        Keras-compatible generator of batches for BERT (can be used with
-        `keras.models.Model.fit_generator`).
-
-        Generates tuples of (inputs, targets).
-        `inputs` is a list of two values:
-            1. masked_sequence: an integer tensor shaped as
-               (batch_size, sequence_length), containing token ids of
-               the input sequence, with some words masked by the [MASK] token.
-            2. segment id: an integer tensor shaped as
-               (batch_size, sequence_length),
-               and containing 0 or 1 depending on which segment (A or B)
-               each position is related to.
-
-        `targets` is also a list of two values:
-            1. combined_label: an integer tensor of a shape
-               (batch_size, sequence_length, 2), containing both
-               - the original token ids
-               - and the mask (0s and 1s, indicating places where
-                 a word has been replaced).
-               both stacked along the last dimension.
-               So combined_label[:, :, 0] would slice only the token ids,
-               and combined_label[:, :, 1] would slice only the mask.
-            2. has_next: a float32 tensor (batch_size, 1) containing
-               1s for all samples where "sentence B" is directly following
-               the "sentence A", and 0s otherwise.
-        """
-        while True:
-
-            if self.index >= self.data_size:
-                self.index = 0
-
-            concept_sequence_batch = islice(self.concept_sequences, self.index, self.index + self.batch_size)
-            self.index += self.batch_size
-
-            next_bunch_of_samples = self.generate_samples(concept_sequence_batch)
-
-            mask, sequence, masked_sequence = zip(*list(next_bunch_of_samples))
-
-            combined_label = np.stack([sequence, mask], axis=-1)
-
-            yield (
-                [np.array(masked_sequence)],
-                [combined_label]
-            )
-
-    def generate_samples(self, concept_sequence_batch):
-        """
-        Generates samples, one by one, for later concatenation into batches
-        by `generate_batches()`.
-        """
-        results = []
-
-        for sequence in concept_sequence_batch:
-            masked_sequence = sequence.copy()
-            output_mask = np.zeros((len(sequence),), dtype=int)
-
-            for word_pos in range(0, len(sequence)):
-
-                if sequence[word_pos] == self.unused_token_id:
-                    break
-                if random.random() < 0.15:
-                    dice = random.random()
-                    if dice < 0.8:
-                        masked_sequence[word_pos] = self.mask_token_id
-                    elif dice < 0.9:
-                        masked_sequence[word_pos] = random.randint(
-                            self.first_token_id, self.last_token_id)
-                    # else: 10% of the time we just leave the word as is
-                    output_mask[word_pos] = 1
-            results.append((output_mask, sequence, masked_sequence))
-
-        return results
+    def get_mask_token_id(self):
+        mask_token_id = self.encode(self.mask_token)
+        while isinstance(mask_token_id, list):
+            mask_token_id = mask_token_id[0]
+        return mask_token_id
 
 
 class BatchGenerator:
@@ -181,21 +87,28 @@ class BatchGenerator:
         training_example_generator = self.data_generator()
         while True:
             next_bunch_of_examples = islice(training_example_generator, self.batch_size)
-            target_concepts, target_time_stamps, context_concepts, context_time_stamps, labels = zip(
+
+            (target_concepts, target_time_stamps, target_time_periods, context_concepts, context_time_stamps,
+             context_time_periods, labels) = zip(
                 *list(next_bunch_of_examples))
 
             target_concepts = np.asarray(target_concepts)
             target_time_stamps = np.asarray(target_time_stamps)
+            target_time_periods = np.asarray(target_time_periods)
             context_concepts = pad_sequences(context_concepts, maxlen=self.max_sequence_length, padding='post',
                                              value=self.unused_token_id)
             context_time_stamps = pad_sequences(context_time_stamps, maxlen=self.max_sequence_length, padding='post',
                                                 value=0, dtype='float32')
+            context_time_periods = pad_sequences(context_time_periods, maxlen=self.max_sequence_length, padding='post',
+                                                 value=0)
             mask = (context_concepts == self.unused_token_id).astype(int)
 
             yield ({'target_concepts': target_concepts,
                     'target_time_stamps': target_time_stamps,
+                    'target_time_periods': target_time_periods,
                     'context_concepts': context_concepts,
                     'context_time_stamps': context_time_stamps,
+                    'context_time_periods': context_time_periods,
                     'mask': mask}, labels)
 
     def data_generator(self):
@@ -204,15 +117,20 @@ class BatchGenerator:
 
         while True:
             for tup in self.patient_event_sequence.itertuples():
-                concept_ids, dates = zip(*sorted(zip(tup.token_ids, tup.dates), key=lambda tup2: tup2[1]))
+
+                dates, concept_ids, periods = zip(
+                    *sorted(zip(tup.dates, tup.token_ids, tup.periods), key=lambda tup2: tup2[0]))
+
                 for i, concept_id in enumerate(concept_ids):
                     left_index = i - half_window_size if i - half_window_size > 0 else 0
                     right_index = i + 1 + half_window_size
+
                     target_concepts = [concept_id]
                     target_time_stamps = [dates[i]]
-
-                    context_concepts = np.asarray(concept_ids[left_index: i] + concept_ids[i + 1: right_index])
-                    context_time_stamps = np.asarray(dates[left_index: i] + dates[i + 1: right_index])
+                    target_time_periods = [periods[i]]
+                    context_concepts = concept_ids[left_index: i] + concept_ids[i + 1: right_index]
+                    context_time_stamps = dates[left_index: i] + dates[i + 1: right_index]
+                    context_time_periods = periods[left_index: i] + periods[i + 1: right_index]
 
                     time_deltas = context_time_stamps - dates[i]
 
@@ -221,8 +139,10 @@ class BatchGenerator:
 
                     if len(qualified_indexes) >= self.minimum_num_of_concepts:
                         yield (
-                            target_concepts, target_time_stamps, context_concepts[qualified_indexes],
-                            context_time_stamps[qualified_indexes], target_concepts)
+                            target_concepts, target_time_stamps, target_time_periods,
+                            context_concepts[qualified_indexes],
+                            context_time_stamps[qualified_indexes], context_time_periods[qualified_indexes],
+                            target_concepts)
 
     def get_steps_per_epoch(self):
         return self.estimate_data_size() // self.batch_size
@@ -274,3 +194,72 @@ class NegativeSamplingBatchGenerator(BatchGenerator):
 
     def estimate_data_size(self):
         return super().estimate_data_size() * (1 + self.num_of_negative_samples)
+
+
+class BertBatchGenerator(BatchGenerator):
+    """
+    This class generates batches for a BERT-based language model
+    in an abstract way, by using an external function sampling
+    sequences of token IDs of a given length.
+    """
+
+    def __init__(self,
+                 mask_token_id: int,
+                 first_token_id: int,
+                 last_token_id: int,
+                 *args, **kwargs):
+        super(BertBatchGenerator, self).__init__(*args, **kwargs)
+        self.mask_token_id = mask_token_id
+        self.first_token_id = first_token_id
+        self.last_token_id = last_token_id
+
+    def generate_batches(self):
+        training_example_generator = self.data_generator()
+        while True:
+            next_bunch_of_examples = islice(training_example_generator, self.batch_size)
+            output_mask, sequence, masked_sequence, time_stamp_sequence = zip(*list(next_bunch_of_examples))
+
+            sequence = pad_sequences(np.asarray(sequence), maxlen=self.max_sequence_length, padding='post',
+                                     value=self.unused_token_id)
+            masked_sequence = pad_sequences(np.asarray(masked_sequence), maxlen=self.max_sequence_length,
+                                            padding='post',
+                                            value=self.unused_token_id)
+            time_stamp_sequence = pad_sequences(np.asarray(time_stamp_sequence), maxlen=self.max_sequence_length,
+                                                padding='post',
+                                                value=0, dtype='float32')
+            mask = (sequence == self.unused_token_id).astype(int)
+            combined_label = np.stack([sequence, output_mask], axis=-1)
+
+            yield ({'masked_concept_ids': masked_sequence,
+                    'concept_ids': sequence,
+                    'time_stamps': time_stamp_sequence,
+                    'mask': mask}, [combined_label])
+
+    def data_generator(self):
+        while True:
+            for tup in self.patient_event_sequence.itertuples():
+                concept_ids = tup.token_ids
+                dates = tup.dates
+                for i, concept_id in enumerate(concept_ids):
+                    right_index = i + self.max_sequence_length
+
+                    sequence = concept_ids[i: right_index]
+                    time_stamp_sequence = dates[i: right_index]
+
+                    masked_sequence = sequence.copy()
+                    output_mask = np.zeros((self.max_sequence_length,), dtype=int)
+
+                    for word_pos in range(0, len(sequence)):
+                        if sequence[word_pos] == self.unused_token_id:
+                            break
+                        if random.random() < 0.15:
+                            dice = random.random()
+                            if dice < 0.8:
+                                masked_sequence[word_pos] = self.mask_token_id
+                            elif dice < 0.9:
+                                masked_sequence[word_pos] = random.randint(
+                                    self.first_token_id, self.last_token_id)
+                            # else: 10% of the time we just leave the word as is
+                            output_mask[word_pos] = 1
+
+                    yield (output_mask, sequence, masked_sequence, time_stamp_sequence)
