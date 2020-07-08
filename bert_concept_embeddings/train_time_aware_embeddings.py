@@ -5,6 +5,9 @@ import itertools
 import pickle
 
 import pandas as pd
+import numpy as np
+from scipy.stats import norm
+from scipy.special import softmax
 
 from bert_concept_embeddings.custom_layers import get_custom_objects
 from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BatchGenerator
@@ -12,6 +15,7 @@ from bert_concept_embeddings.model import time_attention_cbow_model
 from bert_concept_embeddings.utils import CosineLRSchedule
 
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 
 def process_raw_input(raw_input_data_path, training_data_path):
@@ -59,6 +63,20 @@ def tokenize_concept_sequences(training_data, tokenizer_path):
     pickle.dump(tokenizer, open(tokenizer_path, 'wb'))
 
     return tokenizer, training_data
+
+
+def random_mutate_time_stamps(inputs, label, batch_size, context_window_size, week_threshold=2, scale=1.0):
+    context_time_stamps = inputs['context_time_stamps']
+    
+    dist = tfp.distributions.Normal(loc=0., scale=scale)
+    
+    time_bucket_mutations = np.asarray(list(range(-week_threshold, week_threshold + 1)))
+    time_buckets_probability = dist.prob(time_bucket_mutations.astype(float))
+    time_buckets_probability = time_buckets_probability / tf.reduce_sum(time_buckets_probability)
+    
+    random_mutation = tf.random.categorical(tf.tile(tf.expand_dims(time_buckets_probability, axis=0),  tf.constant([batch_size, 1])), context_window_size) - week_threshold
+    inputs['context_time_stamps'] = context_time_stamps + tf.cast(random_mutation, dtype=tf.float32)
+    return inputs, label
 
 
 def train(model_path,
@@ -118,7 +136,7 @@ def train(model_path,
             CosineLRSchedule(
                 lr_high=learning_rate,
                 lr_low=1e-8,
-                initial_period=10), verbose=1),
+                initial_period=10), verbose=1)
     ]
 
     model.fit(
@@ -155,9 +173,15 @@ def main(args):
                                                             'context_concepts': tf.int32,
                                                             'context_time_stamps': tf.float32,
                                                             'mask': tf.int32}, tf.int32))
-
-    dataset = dataset.take(batch_generator.get_steps_per_epoch()).cache(os.path.join(args.output_folder, 'cached_data')).repeat()
-    dataset = dataset.shuffle(10).prefetch(tf.data.experimental.AUTOTUNE)
+    
+    dataset = dataset.take(batch_generator.get_steps_per_epoch()).cache().repeat()
+    dataset = dataset.shuffle(5).prefetch(tf.data.experimental.AUTOTUNE)
+    dataset = dataset.map(lambda inputs, label: random_mutate_time_stamps(inputs, 
+                                                                          label, 
+                                                                          args.batch_size, 
+                                                                          args.max_seq_length,
+                                                                          5, 2.0),
+                          num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     train(model_path=model_path,
           dataset=dataset,

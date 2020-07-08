@@ -100,7 +100,7 @@ def join_domain_time_span(domain_tables, span=0):
             .withColumn("upper_bound", F.date_add(F.col(date_field), span))
 
         # standardize the output columns
-        domain_table = domain_table.where(F.col(concept_id_field) != 0) \
+        domain_table = domain_table.where(F.col(concept_id_field).cast('string') != '0') \
             .select(domain_table["person_id"],
                     domain_table[concept_id_field].alias("standard_concept_id"),
                     domain_table["date"],
@@ -138,7 +138,7 @@ def join_domain_tables(domain_tables):
         # extract the name of the table
         concept_id_field, date_field, table_domain_field = get_key_fields(domain_table)
         # standardize the output columns
-        domain_table = domain_table.where(F.col(concept_id_field) != 0) \
+        domain_table = domain_table.where(F.col(concept_id_field).cast('string') != '0') \
             .withColumn('date', F.to_date(F.col(date_field)))
 
         domain_table = domain_table.select(domain_table['person_id'],

@@ -206,17 +206,9 @@ class BatchGenerator:
         half_window_size = int(self.max_sequence_length / 2)
         half_time_window = int(self.time_window_size / 2)
 
-        time_bucket_mutations = np.asarray(list(range(-5, 5 + 1)))
-        time_bucket_mutations_upper = time_bucket_mutations + 0.5
-        time_bucket_mutations_lower = time_bucket_mutations - 0.5
-        time_buckets_probability = norm.cdf(time_bucket_mutations_upper, scale=2) - norm.cdf(
-            time_bucket_mutations_lower, scale=2)
-        time_buckets_probability = time_buckets_probability / time_buckets_probability.sum()
-
         while True:
             for tup in self.patient_event_sequence.itertuples():
-                concept_ids = tup.token_ids
-                dates = tup.dates
+                concept_ids, dates = zip(*sorted(zip(tup.token_ids, tup.dates), key=lambda tup2: tup2[1]))
                 for i, concept_id in enumerate(concept_ids):
                     left_index = i - half_window_size if i - half_window_size > 0 else 0
                     right_index = i + 1 + half_window_size
@@ -230,17 +222,14 @@ class BatchGenerator:
 
                     qualified_indexes = np.squeeze(np.argwhere(
                         (time_deltas >= -half_time_window) & (time_deltas <= half_time_window)), axis=-1)
-                    context_time_stamps = np.asarray(context_time_stamps) + np.random.choice(time_bucket_mutations,
-                                                                                             size=len(
-                                                                                                 context_time_stamps),
-                                                                                             p=time_buckets_probability)
+                    
                     if len(qualified_indexes) >= 10:
                         yield (
                             target_concepts, target_time_stamps, context_concepts[qualified_indexes],
                             context_time_stamps[qualified_indexes], target_concepts)
 
     def get_steps_per_epoch(self):
-        return self.estimate_data_size() // self.batch_size
+        return (self.estimate_data_size() // self.batch_size)
 
     def estimate_data_size(self):
         return len(self.patient_event_sequence.token_ids.explode())
