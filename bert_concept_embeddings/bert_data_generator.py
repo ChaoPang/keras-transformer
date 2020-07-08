@@ -4,12 +4,6 @@ from itertools import islice, chain
 from typing import List, Callable, Optional, Sequence
 
 import numpy as np
-from scipy.stats import norm
-from scipy.special import softmax
-# noinspection PyPep8Naming
-from keras import backend as K
-from keras.utils import get_custom_objects
-# -
 
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
@@ -173,13 +167,15 @@ class BatchGenerator:
                  unused_token_id: int,
                  max_sequence_length: int,
                  batch_size: int,
-                 time_window_size: int = 100):
+                 time_window_size: int = 100,
+                 minimum_num_of_concepts: int = 5):
 
         self.patient_event_sequence = patient_event_sequence
         self.batch_size = batch_size
         self.max_sequence_length = max_sequence_length
         self.unused_token_id = unused_token_id
         self.time_window_size = time_window_size
+        self.minimum_num_of_concepts = minimum_num_of_concepts
 
     def batch_generator(self):
         training_example_generator = self.data_generator()
@@ -222,14 +218,14 @@ class BatchGenerator:
 
                     qualified_indexes = np.squeeze(np.argwhere(
                         (time_deltas >= -half_time_window) & (time_deltas <= half_time_window)), axis=-1)
-                    
-                    if len(qualified_indexes) >= 10:
+
+                    if len(qualified_indexes) >= self.minimum_num_of_concepts:
                         yield (
                             target_concepts, target_time_stamps, context_concepts[qualified_indexes],
                             context_time_stamps[qualified_indexes], target_concepts)
 
     def get_steps_per_epoch(self):
-        return (self.estimate_data_size() // self.batch_size)
+        return self.estimate_data_size() // self.batch_size
 
     def estimate_data_size(self):
         return len(self.patient_event_sequence.token_ids.explode())
