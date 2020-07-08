@@ -128,9 +128,9 @@ class BatchGenerator:
                     target_concepts = [concept_id]
                     target_time_stamps = [dates[i]]
                     target_time_periods = [periods[i]]
-                    context_concepts = concept_ids[left_index: i] + concept_ids[i + 1: right_index]
-                    context_time_stamps = dates[left_index: i] + dates[i + 1: right_index]
-                    context_time_periods = periods[left_index: i] + periods[i + 1: right_index]
+                    context_concepts = np.asarray(concept_ids[left_index: i] + concept_ids[i + 1: right_index])
+                    context_time_stamps = np.asarray(dates[left_index: i] + dates[i + 1: right_index])
+                    context_time_periods = np.asarray(periods[left_index: i] + periods[i + 1: right_index])
 
                     time_deltas = context_time_stamps - dates[i]
 
