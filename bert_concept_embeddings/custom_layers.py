@@ -197,7 +197,8 @@ class TimeAttention(tf.keras.layers.Layer):
         self.time_window_size = self.half_window_size * 2 + 1
         self.return_logits = return_logits
 
-        self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size, self.time_window_size,
+        self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size,
+                                                         self.time_window_size,
                                                          embeddings_initializer=tf.keras.initializers.zeros,
                                                          name='time_attention_embedding')
         self.softmax_layer = tf.keras.layers.Softmax()
@@ -210,12 +211,6 @@ class TimeAttention(tf.keras.layers.Layer):
         config['time_window_size'] = self.time_window_size
         config['return_logits'] = self.return_logits
         return config
-
-    def build(self, input_shape):
-        self.time_attention_bias = self.add_weight(name='time_attention_bias',
-                                                   shape=self.time_window_size,
-                                                   initializer=tf.keras.initializers.zeros,
-                                                   trainable=True)
 
     def call(self, inputs, **kwargs):
         """
@@ -230,7 +225,7 @@ class TimeAttention(tf.keras.layers.Layer):
         time_mask = inputs[3]
 
         # shape = (batch_size, target_seq_length, time_window_size)
-        concept_time_embeddings = self.embedding_layer(target_concepts) + self.time_attention_bias
+        concept_time_embeddings = self.embedding_layer(target_concepts)
 
         # shape = (batch_size, context_seq_length, target_seq_len)
         multiplied_context_time_stamps = tf.tile(tf.expand_dims(context_time_stamps, axis=-1),
@@ -247,8 +242,12 @@ class TimeAttention(tf.keras.layers.Layer):
         # shape = (batch_size, target_seq_length, context_seq_length, full_time_window_size)
         time_delta_one_hot = tf.one_hot(time_delta_value_clipped + self.half_window_size, self.time_window_size)
 
+        # shape = (batch_size, target_seq_length, time_window_size)
+        normalized_concept_time_attentions = tf.math.divide_no_nan(concept_time_embeddings,
+                                                                   tf.reduce_sum(time_delta_one_hot, axis=2))
+
         # shape = (batch_size, target_seq_length, time_window_size, 1)
-        concept_time_embeddings_expanded = tf.expand_dims(concept_time_embeddings, axis=-1)
+        concept_time_embeddings_expanded = tf.expand_dims(normalized_concept_time_attentions, axis=-1)
 
         # shape = (batch_size, target_seq_length, context_seq_length)
         next_input = tf.squeeze(tf.matmul(time_delta_one_hot, concept_time_embeddings_expanded),

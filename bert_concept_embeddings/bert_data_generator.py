@@ -4,10 +4,6 @@ from itertools import islice, chain
 from typing import List, Callable, Optional, Sequence
 
 import numpy as np
-# noinspection PyPep8Naming
-from keras import backend as K
-from keras.utils import get_custom_objects
-# -
 
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
@@ -75,12 +71,16 @@ class BatchGenerator:
     def __init__(self, patient_event_sequence,
                  unused_token_id: int,
                  max_sequence_length: int,
-                 batch_size: int):
+                 batch_size: int,
+                 time_window_size: int = 100,
+                 minimum_num_of_concepts: int = 5):
 
         self.patient_event_sequence = patient_event_sequence
         self.batch_size = batch_size
         self.max_sequence_length = max_sequence_length
         self.unused_token_id = unused_token_id
+        self.time_window_size = time_window_size
+        self.minimum_num_of_concepts = minimum_num_of_concepts
 
     def batch_generator(self):
         training_example_generator = self.data_generator()
@@ -105,19 +105,29 @@ class BatchGenerator:
 
     def data_generator(self):
         half_window_size = int(self.max_sequence_length / 2)
+        half_time_window = int(self.time_window_size / 2)
+
         while True:
             for tup in self.patient_event_sequence.itertuples():
-                concept_ids = tup.token_ids
-                dates = tup.dates
+                concept_ids, dates = zip(*sorted(zip(tup.token_ids, tup.dates), key=lambda tup2: tup2[1]))
                 for i, concept_id in enumerate(concept_ids):
                     left_index = i - half_window_size if i - half_window_size > 0 else 0
                     right_index = i + 1 + half_window_size
                     target_concepts = [concept_id]
                     target_time_stamps = [dates[i]]
-                    context_concepts = concept_ids[left_index: i] + concept_ids[i + 1: right_index]
-                    context_time_stamps = dates[left_index: i] + dates[i + 1: right_index]
 
-                    yield (target_concepts, target_time_stamps, context_concepts, context_time_stamps, target_concepts)
+                    context_concepts = np.asarray(concept_ids[left_index: i] + concept_ids[i + 1: right_index])
+                    context_time_stamps = np.asarray(dates[left_index: i] + dates[i + 1: right_index])
+
+                    time_deltas = context_time_stamps - dates[i]
+
+                    qualified_indexes = np.squeeze(np.argwhere(
+                        (time_deltas >= -half_time_window) & (time_deltas <= half_time_window)), axis=-1)
+
+                    if len(qualified_indexes) >= self.minimum_num_of_concepts:
+                        yield (
+                            target_concepts, target_time_stamps, context_concepts[qualified_indexes],
+                            context_time_stamps[qualified_indexes], target_concepts)
 
     def get_steps_per_epoch(self):
         return self.estimate_data_size() // self.batch_size
