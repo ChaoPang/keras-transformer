@@ -163,7 +163,7 @@ class Encoder(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super().get_config()
-        config['num_layers'] = self.num_laers
+        config['num_layers'] = self.num_layers
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
         config['dff'] = self.dff
@@ -280,6 +280,7 @@ class TimeSelfAttention(TimeAttention):
 
 get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
+    'Encoder': Encoder,
     'EncoderLayer': EncoderLayer,
     'TimeAttention': TimeAttention,
     'TimeSelfAttention': TimeSelfAttention,
