@@ -4,35 +4,6 @@ import numpy as np
 from keras.utils import get_custom_objects
 
 
-def create_padding_mask(seq):
-    seq = tf.cast(tf.math.equal(seq, 0), tf.float32)
-
-    # add extra dimensions to add the padding
-    # to the attention logits.
-    return seq[:, tf.newaxis, tf.newaxis, :]  # (batch_size, 1, 1, seq_len)
-
-
-def get_angles(pos, i, d_model):
-    angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
-    return pos * angle_rates
-
-
-def positional_encoding(position, d_model):
-    angle_rads = get_angles(np.arange(position)[:, np.newaxis],
-                            np.arange(d_model)[np.newaxis, :],
-                            d_model)
-
-    # apply sin to even indices in the array; 2i
-    angle_rads[:, 0::2] = np.sin(angle_rads[:, 0::2])
-
-    # apply cos to odd indices in the array; 2i+1
-    angle_rads[:, 1::2] = np.cos(angle_rads[:, 1::2])
-
-    pos_encoding = angle_rads[np.newaxis, ...]
-
-    return tf.cast(pos_encoding, dtype=tf.float32)
-
-
 def point_wise_feed_forward_network(d_model, dff):
     return tf.keras.Sequential([
         tf.keras.layers.Dense(dff, activation='relu'),  # (batch_size, seq_len, dff)
@@ -139,8 +110,8 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
 
 class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, rate=0.1, **kwargs):
-        super(EncoderLayer, self).__init__(**kwargs)
+    def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
+        super(EncoderLayer, self).__init__(*args, **kwargs)
 
         self.d_model = d_model
         self.num_heads = num_heads
@@ -164,16 +135,47 @@ class EncoderLayer(tf.keras.layers.Layer):
         config['rate'] = self.rate
         return config
 
-    def call(self, x, mask, time_attention_logits):
-        attn_output, _ = self.mha(x, x, x, mask, time_attention_logits)  # (batch_size, input_seq_len, d_model)
-        attn_output = self.dropout1(attn_output)
+    def call(self, x, mask, time_attention_logits, **kwargs):
+        attn_output, attn_weights = self.mha(x, x, x, mask,
+                                             time_attention_logits)  # (batch_size, input_seq_len, d_model)
+        attn_output = self.dropout1(attn_output, training=kwargs.get('training'))
         out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, d_model)
 
         ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, d_model)
-        ffn_output = self.dropout2(ffn_output)
+        ffn_output = self.dropout2(ffn_output, training=kwargs.get('training'))
         out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, d_model)
 
-        return out2
+        return out2, attn_weights
+
+
+class Encoder(tf.keras.layers.Layer):
+    def __init__(self, num_layers, d_model, num_heads, dff=2148, dropout_rate=0.1, *args, **kwargs):
+        super(Encoder, self).__init__(*args, **kwargs)
+
+        self.d_model = d_model
+        self.num_layers = num_layers
+        self.num_heads = num_heads
+        self.dff = dff
+        self.dropout_rate = dropout_rate
+        self.enc_layers = [EncoderLayer(d_model, num_heads, dff, dropout_rate)
+                           for _ in range(num_layers)]
+        self.dropout = tf.keras.layers.Dropout(dropout_rate)
+
+    def get_config(self):
+        config = super().get_config()
+        config['num_layers'] = self.num_laers
+        config['d_model'] = self.d_model
+        config['num_heads'] = self.num_heads
+        config['dff'] = self.dff
+        config['dropout_rate'] = self.dropout_rate
+        return config
+
+    def call(self, x, mask, time_attention_logits, **kwargs):
+        attention_weights = {}
+        for i in range(self.num_layers):
+            x, attn_weights = self.enc_layers[i](x, mask, time_attention_logits, **kwargs)
+            attention_weights['encoder_layer{}'.format(i + 1)] = attn_weights
+        return x, attention_weights  # (batch_size, input_seq_len, d_model)
 
 
 class TimeAttention(tf.keras.layers.Layer):

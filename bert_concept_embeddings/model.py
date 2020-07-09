@@ -5,7 +5,7 @@ import tensorflow as tf
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.position import TransformerCoordinateEmbedding
 
-from bert_concept_embeddings.custom_layers import EncoderLayer, TimeSelfAttention, TimeAttention
+from bert_concept_embeddings.custom_layers import EncoderLayer, TimeSelfAttention, TimeAttention, Encoder
 
 
 def time_attention_cbow_negative_sampling_model(max_seq_length: int,
@@ -158,6 +158,7 @@ def transformer_bert_model(
 
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
 
+    # Define Layers below in a Bert model
     embedding_layer = ReusableEmbedding(
         vocabulary_size, concept_embedding_size,
         input_length=max_seq_length,
@@ -172,6 +173,8 @@ def transformer_bert_model(
                                              context_seq_len=max_seq_length,
                                              time_window_size=time_window_size,
                                              return_logits=True)
+
+    encoder_layer = Encoder(num_layers=depth, d_model=masked_concept_ids, num_heads=num_heads)
 
     output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
@@ -192,21 +195,13 @@ def transformer_bert_model(
     # pad a dimension to accommodate the head split
     time_attention = tf.expand_dims(time_attention, axis=1)
 
-    for i in range(depth):
-        next_step_input = (
-            EncoderLayer(
-                name='transformer' + str(i),
-                d_model=concept_embedding_size,
-                num_heads=num_heads,
-                rate=transformer_dropout,
-                dff=2148)
-            (next_step_input, concept_mask, time_attention))
+    next_step_input, attention_weights = encoder_layer(next_step_input, concept_mask, time_attention)
 
     concept_predictions = softmax_layer(
         output_layer([next_step_input, embedding_matrix]))
 
     model = tf.keras.Model(
         inputs=[masked_concept_ids, concept_ids, time_stamps, mask],
-        outputs=[concept_predictions])
+        outputs=[concept_predictions, attention_weights])
 
     return model
