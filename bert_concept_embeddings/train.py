@@ -25,7 +25,7 @@ TIME_WINDOW = 100
 BATCH_SIZE = 512
 LEARNING_RATE = 2e-4
 CONCEPT_EMBEDDING = 128
-EPOCH = 10
+EPOCH = 20
 
 
 def compile_new_model():
@@ -49,7 +49,7 @@ def compile_new_model():
 
 
 # +
-input_folder = '/data/research_ops/omops/ohdsi_covid/'
+input_folder = '/data/research_ops/omops/ohdsi_covid/output'
 output_folder = '/data/research_ops/omops/ohdsi_covid/bert'
 
 training_data_path = os.path.join(input_folder, 'patient_event_sequence.pickle')
@@ -73,10 +73,22 @@ data_generator = BertBatchGenerator(patient_event_sequence=training_data,
                                     first_token_id=tokenizer.get_first_token_index(),
                                     last_token_id=tokenizer.get_last_token_index())
 
+dataset = tf.data.Dataset.from_generator(data_generator.batch_generator,
+                                             output_types=({'masked_concept_ids': tf.int32,
+                                                            'concept_ids': tf.int32,
+                                                            'time_stamps': tf.int32,
+                                                            'mask': tf.int32}, tf.int32))
+
+dataset = dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()
+dataset = dataset.shuffle(5).prefetch(tf.data.experimental.AUTOTUNE)
+
 strategy = tf.distribute.MirroredStrategy()
 print('Number of devices: {}'.format(strategy.num_replicas_in_sync))
 with strategy.scope():
-    model = compile_new_model()
+    if os.path.exists(model_path):
+        model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
+    else:
+        model = compile_new_model()
 
 lr_scheduler = callbacks.LearningRateScheduler(
     CosineLRSchedule(lr_high=LEARNING_RATE, lr_low=1e-8,
@@ -91,12 +103,12 @@ model_callbacks = [
     lr_scheduler,
 ]
 
-model.fit_generator(
-    generator=data_generator.generate_batches(),
-    steps_per_epoch=data_generator.get_steps_per_epoch(),
+model.fit(
+    dataset,
+    steps_per_epoch=data_generator.get_steps_per_epoch() + 1,
     epochs=EPOCH,
     callbacks=model_callbacks,
-    validation_data=data_generator.generate_batches(),
+    validation_data=dataset.shard(10, 1),
     validation_steps=10,
 )
 
