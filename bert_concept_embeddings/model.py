@@ -158,7 +158,6 @@ def transformer_bert_model(
 
     l2_regularizer = (tf.keras.regularizers.l2(l2_reg_penalty) if l2_reg_penalty else None)
 
-    # Define Layers below in a Bert model
     embedding_layer = ReusableEmbedding(
         vocabulary_size, concept_embedding_size,
         input_length=max_seq_length,
@@ -174,7 +173,10 @@ def transformer_bert_model(
                                              time_window_size=time_window_size,
                                              return_logits=True)
 
-    encoder_layer = Encoder(num_layers=depth, d_model=masked_concept_ids, num_heads=num_heads)
+    encoder_layer = Encoder(num_layers=depth,
+                            d_model=concept_embedding_size,
+                            num_heads=num_heads,
+                            dropout_rate=transformer_dropout)
 
     output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
