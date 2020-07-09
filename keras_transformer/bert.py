@@ -231,17 +231,15 @@ class MaskedPenalizedSparseCategoricalCrossentropy(object):
         
         y_true_val = y_true[:, :, 0]
         mask = y_true[:, :, 1]
-
-        y_pred_val = y_pred[0]
-
+        
         # masked per-sample means of each loss
         num_items_masked = K.sum(mask, axis=-1) + 1e-6
         masked_cross_entropy = (
-            K.sum(mask * K.sparse_categorical_crossentropy(y_true_val, y_pred_val),
+            K.sum(mask * K.sparse_categorical_crossentropy(y_true_val, y_pred),
                   axis=-1)
             / num_items_masked)
         masked_entropy = (
-            K.sum(mask * -K.sum(y_pred_val * K.log(y_pred_val), axis=-1), axis=-1)
+            K.sum(mask * -K.sum(y_pred * K.log(y_pred), axis=-1), axis=-1)
             / num_items_masked)
         return masked_cross_entropy - self.penalty_weight * masked_entropy
 
@@ -249,8 +247,7 @@ class MaskedPenalizedSparseCategoricalCrossentropy(object):
         return {
             'penalty_weight': self.penalty_weight
         }
-
-
+    
 get_custom_objects().update({
     'MaskedPenalizedSparseCategoricalCrossentropy':
         MaskedPenalizedSparseCategoricalCrossentropy,

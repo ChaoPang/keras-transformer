@@ -173,7 +173,8 @@ def transformer_bert_model(
                                              time_window_size=time_window_size,
                                              return_logits=True)
 
-    encoder_layer = Encoder(num_layers=depth,
+    encoder_layer = Encoder(name='encoder', 
+                            num_layers=depth,
                             d_model=concept_embedding_size,
                             num_heads=num_heads,
                             dropout_rate=transformer_dropout)
@@ -197,13 +198,13 @@ def transformer_bert_model(
     # pad a dimension to accommodate the head split
     time_attention = tf.expand_dims(time_attention, axis=1)
 
-    next_step_input, attention_weights = encoder_layer(next_step_input, concept_mask, time_attention)
+    next_step_input, _ = encoder_layer(next_step_input, concept_mask, time_attention)
 
     concept_predictions = softmax_layer(
         output_layer([next_step_input, embedding_matrix]))
 
     model = tf.keras.Model(
         inputs=[masked_concept_ids, concept_ids, time_stamps, mask],
-        outputs=[concept_predictions, attention_weights])
+        outputs=[concept_predictions])
 
     return model
