@@ -97,13 +97,13 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.wv = tf.keras.layers.Dense(d_model)
 
         self.dense = tf.keras.layers.Dense(d_model)
-        
+
     def get_config(self):
         config = super().get_config()
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
         return config
-        
+
     def split_heads(self, x, batch_size):
         """Split the last dimension into (num_heads, depth).
         Transpose the result such that the shape is (batch_size, num_heads, seq_len, depth)
@@ -141,12 +141,12 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 class EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, **kwargs):
         super(EncoderLayer, self).__init__(**kwargs)
-        
+
         self.d_model = d_model
         self.num_heads = num_heads
         self.dff = dff
         self.rate = rate
-        
+
         self.mha = MultiHeadAttention(d_model, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
@@ -269,11 +269,11 @@ class TimeSelfAttention(TimeAttention):
         :param kwargs:
         :return:
         """
-        batch_concept_sequence = inputs[0]
-        batch_time_sequence = inputs[1]
+        concept_ids = inputs[0]
+        time_stamps = inputs[1]
         mask = inputs[2]
 
-        return super().call([batch_concept_sequence, batch_time_sequence, batch_time_sequence, mask])
+        return super().call([concept_ids, time_stamps, time_stamps, mask])
 
 
 get_custom_objects().update({

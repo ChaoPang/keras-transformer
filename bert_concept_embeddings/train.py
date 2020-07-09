@@ -2,19 +2,16 @@ import pickle
 
 import pandas as pd
 import os
-import math
 
 from keras_transformer.bert import (masked_perplexity,
                                     MaskedPenalizedSparseCategoricalCrossentropy)
 
-from keras.models import load_model
-# noinspection PyPep8Naming
 from tensorflow.keras import optimizers
 from tensorflow.keras import callbacks
-from tensorflow.keras import losses
 
 from bert_concept_embeddings.model import *
 from bert_concept_embeddings.utils import CosineLRSchedule
+from bert_concept_embeddings.custom_layers import get_custom_objects
 
 from bert_concept_embeddings.bert_data_generator import ConceptTokenizer, BertBatchGenerator
 
@@ -74,10 +71,10 @@ data_generator = BertBatchGenerator(patient_event_sequence=training_data,
                                     last_token_id=tokenizer.get_last_token_index())
 
 dataset = tf.data.Dataset.from_generator(data_generator.batch_generator,
-                                             output_types=({'masked_concept_ids': tf.int32,
-                                                            'concept_ids': tf.int32,
-                                                            'time_stamps': tf.int32,
-                                                            'mask': tf.int32}, tf.int32))
+                                         output_types=({'masked_concept_ids': tf.int32,
+                                                        'concept_ids': tf.int32,
+                                                        'time_stamps': tf.int32,
+                                                        'mask': tf.int32}, tf.int32))
 
 dataset = dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()
 dataset = dataset.shuffle(5).prefetch(tf.data.experimental.AUTOTUNE)
@@ -85,8 +82,8 @@ dataset = dataset.shuffle(5).prefetch(tf.data.experimental.AUTOTUNE)
 strategy = tf.distribute.MirroredStrategy()
 print('Number of devices: {}'.format(strategy.num_replicas_in_sync))
 with strategy.scope():
-    if os.path.exists(model_path):
-        model = tf.keras.models.load_model(model_path, custom_objects=get_custom_objects())
+    if os.path.exists(model_output_path):
+        model = tf.keras.models.load_model(model_output_path, custom_objects=get_custom_objects())
     else:
         model = compile_new_model()
 
@@ -111,5 +108,3 @@ model.fit(
     validation_data=dataset.shard(10, 1),
     validation_steps=10,
 )
-
-

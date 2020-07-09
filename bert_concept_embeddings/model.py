@@ -178,7 +178,7 @@ def transformer_bert_model(
         projection_dropout=embedding_dropout,
         name='concept_prediction_logits')
 
-    output_softmax_layer = tf.keras.layers.Softmax(name='concept_predictions')
+    softmax_layer = tf.keras.layers.Softmax(name='concept_predictions')
 
     coordinate_embedding_layer = TransformerCoordinateEmbedding(1, name='coordinate_embedding')
 
@@ -202,9 +202,7 @@ def transformer_bert_model(
                 dff=2148)
             (next_step_input, concept_mask, time_attention))
 
-    #next_step_input = tf.matmul(time_attention, next_step_input)
-
-    concept_predictions = output_softmax_layer(
+    concept_predictions = softmax_layer(
         output_layer([next_step_input, embedding_matrix]))
 
     model = tf.keras.Model(
