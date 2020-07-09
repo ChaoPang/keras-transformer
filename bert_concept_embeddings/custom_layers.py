@@ -175,7 +175,7 @@ class Encoder(tf.keras.layers.Layer):
         for i in range(self.num_layers):
             x, attn_weights = self.enc_layers[i](x, mask, time_attention_logits, **kwargs)
             attention_weights['encoder_layer{}'.format(i + 1)] = attn_weights
-        return x, attention_weights  # (batch_size, input_seq_len, d_model)
+        return x, attention_weights.keys(), attention_weights.values() # (batch_size, input_seq_len, d_model)
 
 
 class TimeAttention(tf.keras.layers.Layer):
