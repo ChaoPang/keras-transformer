@@ -223,26 +223,32 @@ class BertBatchGenerator(BatchGenerator):
             for tup in self.patient_event_sequence.itertuples():
                 concept_ids = tup.token_ids
                 dates = tup.dates
-                for i, concept_id in enumerate(concept_ids):
-                    right_index = i + self.max_sequence_length
+                visit_orders = tup.concept_id_visit_orders
+                if len(concept_ids) <= self.max_sequence_length:
+                    sequence = concept_ids
+                    time_stamp_sequence = dates
+                else:
+                    unique_random_visits = list(set(visit_orders))
+                    random_index = random.sample(unique_random_visits, 1)
+                    idx = random_visits.index(random_index[0])
+                    sequence = concept_ids[idx: idx + self.max_sequence_length]
+                    time_stamp_sequence = dates[idx: idx + self.max_sequence_length]
+                    
+                masked_sequence = sequence.copy()
+                output_mask = np.zeros((self.max_sequence_length,), dtype=int)
 
-                    sequence = concept_ids[i: right_index]
-                    time_stamp_sequence = dates[i: right_index]
+                for word_pos in range(0, len(sequence)):
+                    if sequence[word_pos] == self.unused_token_id:
+                        break
+                    if random.random() < 0.15:
+                        dice = random.random()
+                        if dice < 0.8:
+                            masked_sequence[word_pos] = self.mask_token_id
+                        elif dice < 0.9:
+                            masked_sequence[word_pos] = random.randint(
+                                self.first_token_id, self.last_token_id)
+                        # else: 10% of the time we just leave the word as is
+                        output_mask[word_pos] = 1
 
-                    masked_sequence = sequence.copy()
-                    output_mask = np.zeros((self.max_sequence_length,), dtype=int)
-
-                    for word_pos in range(0, len(sequence)):
-                        if sequence[word_pos] == self.unused_token_id:
-                            break
-                        if random.random() < 0.15:
-                            dice = random.random()
-                            if dice < 0.8:
-                                masked_sequence[word_pos] = self.mask_token_id
-                            elif dice < 0.9:
-                                masked_sequence[word_pos] = random.randint(
-                                    self.first_token_id, self.last_token_id)
-                            # else: 10% of the time we just leave the word as is
-                            output_mask[word_pos] = 1
-
-                    yield (output_mask, sequence, masked_sequence, time_stamp_sequence)
+                yield (output_mask, sequence, masked_sequence, time_stamp_sequence)
+                    
