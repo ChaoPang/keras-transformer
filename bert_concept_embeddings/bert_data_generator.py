@@ -213,7 +213,7 @@ class BertBatchGenerator(BatchGenerator):
             mask = (sequence == self.unused_token_id).astype(int)
             combined_label = np.stack([sequence, output_mask], axis=-1)
 
-            yield ({'masked_concept_ids': masked_sequence, 
+            yield ({'masked_concept_ids': masked_sequence,
                     'concept_ids': sequence,
                     'time_stamps': time_stamp_sequence,
                     'mask': mask}, combined_label)
@@ -233,7 +233,7 @@ class BertBatchGenerator(BatchGenerator):
                     idx = visit_orders.index(random_index[0])
                     sequence = concept_ids[idx: idx + self.max_sequence_length]
                     time_stamp_sequence = dates[idx: idx + self.max_sequence_length]
-                    
+
                 masked_sequence = sequence.copy()
                 output_mask = np.zeros((self.max_sequence_length,), dtype=int)
 
@@ -251,4 +251,6 @@ class BertBatchGenerator(BatchGenerator):
                         output_mask[word_pos] = 1
 
                 yield (output_mask, sequence, masked_sequence, time_stamp_sequence)
-                    
+
+    def estimate_data_size(self):
+        return len(self.patient_event_sequence)
