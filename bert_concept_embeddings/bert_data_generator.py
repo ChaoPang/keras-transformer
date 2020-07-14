@@ -230,7 +230,7 @@ class BertBatchGenerator(BatchGenerator):
                 else:
                     unique_random_visits = list(set(visit_orders))
                     random_index = random.sample(unique_random_visits, 1)
-                    idx = random_visits.index(random_index[0])
+                    idx = visit_orders.index(random_index[0])
                     sequence = concept_ids[idx: idx + self.max_sequence_length]
                     time_stamp_sequence = dates[idx: idx + self.max_sequence_length]
                     
