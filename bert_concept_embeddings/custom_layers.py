@@ -265,19 +265,19 @@ class TimeAttention(tf.keras.layers.Layer):
 class TimeSelfAttention(TimeAttention):
 
     def __init__(self,
-                 seq_len: int,
+                 target_seq_len: int,
+                 context_seq_len: int,
                  self_attention_return_logits: bool,
                  *args, **kwargs):
-        super(TimeSelfAttention, self).__init__(target_seq_len=seq_len,
-                                                context_seq_len=seq_len,
-                                                return_logits=True,
+
+        assert target_seq_len == context_seq_len
+        super(TimeSelfAttention, self).__init__(target_seq_len=target_seq_len,
+                                                context_seq_len=context_seq_len,
                                                 *args, **kwargs)
-        self.seq_len = seq_len
         self.self_attention_return_logits = self_attention_return_logits
 
     def get_config(self):
         config = super().get_config()
-        config['seq_len'] = self.seq_len
         config['self_attention_return_logits'] = self.self_attention_return_logits
         return config
 

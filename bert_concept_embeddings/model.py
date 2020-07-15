@@ -1,6 +1,7 @@
 import tensorflow as tf
 # +
 import tensorflow as tf
+from docutils.nodes import target
 
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.position import TransformerCoordinateEmbedding
@@ -172,8 +173,10 @@ def transformer_bert_model(
         embeddings_regularizer=l2_regularizer)
 
     time_embedding_layer = TimeSelfAttention(vocab_size=vocabulary_size,
-                                             seq_len=max_seq_length,
+                                             target_seq_len=max_seq_length,
+                                             context_seq_len=max_seq_length,
                                              time_window_size=time_window_size,
+                                             return_logits=True,
                                              self_attention_return_logits=True)
 
     encoder_layer = Encoder(name='encoder',
