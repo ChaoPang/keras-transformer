@@ -1,4 +1,5 @@
 # +
+# # +
 import random
 from itertools import islice, chain
 from typing import List, Callable, Optional, Sequence
@@ -104,30 +105,44 @@ class BatchGenerator:
                     'mask': mask}, labels)
 
     def data_generator(self):
-        half_window_size = int(self.max_sequence_length / 2)
-        half_time_window = int(self.time_window_size / 2)
 
         while True:
             for tup in self.patient_event_sequence.itertuples():
                 concept_ids, dates = zip(*sorted(zip(tup.token_ids, tup.dates), key=lambda tup2: tup2[1]))
                 for i, concept_id in enumerate(concept_ids):
-                    left_index = i - half_window_size if i - half_window_size > 0 else 0
-                    right_index = i + 1 + half_window_size
+
                     target_concepts = [concept_id]
                     target_time_stamps = [dates[i]]
 
-                    context_concepts = np.asarray(concept_ids[left_index: i] + concept_ids[i + 1: right_index])
-                    context_time_stamps = np.asarray(dates[left_index: i] + dates[i + 1: right_index])
+                    is_qualified, context_concepts, context_time_stamps = self.extract_concepts_time_stamps(i,
+                                                                                                            concept_ids,
+                                                                                                            dates)
 
-                    time_deltas = context_time_stamps - dates[i]
-
-                    qualified_indexes = np.squeeze(np.argwhere(
-                        (time_deltas >= -half_time_window) & (time_deltas <= half_time_window)), axis=-1)
-
-                    if len(qualified_indexes) >= self.minimum_num_of_concepts:
+                    if is_qualified:
                         yield (
-                            target_concepts, target_time_stamps, context_concepts[qualified_indexes],
-                            context_time_stamps[qualified_indexes], target_concepts)
+                            target_concepts, target_time_stamps, context_concepts,
+                            context_time_stamps, target_concepts)
+
+    def extract_concepts_time_stamps(self, i, concept_ids, dates):
+
+        half_window_size = int(self.max_sequence_length / 2)
+        half_time_window = int(self.time_window_size / 2)
+
+        left_index = i - half_window_size if i - half_window_size > 0 else 0
+        right_index = i + 1 + half_window_size
+
+        sequence = np.asarray(concept_ids[left_index: i] + concept_ids[i + 1: right_index])
+        time_stamp_sequence = np.asarray(dates[left_index: i] + dates[i + 1: right_index])
+
+        time_deltas = time_stamp_sequence - dates[i]
+
+        qualified_indexes = np.squeeze(np.argwhere(
+            (time_deltas >= -half_time_window) & (time_deltas <= half_time_window)), axis=-1)
+
+        if len(qualified_indexes) > self.minimum_num_of_concepts:
+            return True, sequence[qualified_indexes], time_stamp_sequence[qualified_indexes]
+
+        return False, None, None
 
     def get_steps_per_epoch(self):
         return self.estimate_data_size() // self.batch_size
@@ -219,38 +234,33 @@ class BertBatchGenerator(BatchGenerator):
                     'mask': mask}, combined_label)
 
     def data_generator(self):
+
         while True:
             for tup in self.patient_event_sequence.itertuples():
-                concept_ids = tup.token_ids
-                dates = tup.dates
-                visit_orders = tup.concept_id_visit_orders
-                if len(concept_ids) <= self.max_sequence_length:
-                    sequence = concept_ids
-                    time_stamp_sequence = dates
-                else:
-                    unique_random_visits = list(set(visit_orders))
-                    random_index = random.sample(unique_random_visits, 1)
-                    idx = visit_orders.index(random_index[0])
-                    sequence = concept_ids[idx: idx + self.max_sequence_length]
-                    time_stamp_sequence = dates[idx: idx + self.max_sequence_length]
 
-                masked_sequence = sequence.copy()
-                output_mask = np.zeros((self.max_sequence_length,), dtype=int)
+                concept_ids, dates = zip(*sorted(zip(tup.token_ids, tup.dates), key=lambda tup2: tup2[1]))
 
-                for word_pos in range(0, len(sequence)):
-                    if sequence[word_pos] == self.unused_token_id:
-                        break
-                    if random.random() < 0.15:
-                        dice = random.random()
-                        if dice < 0.8:
-                            masked_sequence[word_pos] = self.mask_token_id
-                        elif dice < 0.9:
-                            masked_sequence[word_pos] = random.randint(
-                                self.first_token_id, self.last_token_id)
-                        # else: 10% of the time we just leave the word as is
-                        output_mask[word_pos] = 1
+                is_qualified, sequence, time_stamp_sequence = self.extract_concepts_time_stamps(
+                    random.randint(0, len(concept_ids) - 1), concept_ids, dates)
 
-                yield (output_mask, sequence, masked_sequence, time_stamp_sequence)
+                if is_qualified:
+                    masked_sequence = sequence.copy()
+                    output_mask = np.zeros((self.max_sequence_length,), dtype=int)
+
+                    for word_pos in range(0, len(sequence)):
+                        if sequence[word_pos] == self.unused_token_id:
+                            break
+                        if random.random() < 0.15:
+                            dice = random.random()
+                            if dice < 0.8:
+                                masked_sequence[word_pos] = self.mask_token_id
+                            elif dice < 0.9:
+                                masked_sequence[word_pos] = random.randint(
+                                    self.first_token_id, self.last_token_id)
+                            # else: 10% of the time we just leave the word as is
+                            output_mask[word_pos] = 1
+
+                    yield (output_mask, sequence, masked_sequence, time_stamp_sequence)
 
     def estimate_data_size(self):
         return len(self.patient_event_sequence)
