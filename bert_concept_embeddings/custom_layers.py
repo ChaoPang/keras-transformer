@@ -224,8 +224,6 @@ class TimeAttention(tf.keras.layers.Layer):
         context_time_stamps = inputs[2]
         time_mask = inputs[3]
 
-        return_logits = kwargs.get('return_logits', False)
-
         # shape = (batch_size, target_seq_length, time_window_size)
         concept_time_embeddings = self.embedding_layer(target_concepts)
 
@@ -259,7 +257,7 @@ class TimeAttention(tf.keras.layers.Layer):
         if time_mask is not None:
             next_input += (tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
 
-        return next_input if return_logits else self.softmax_layer(next_input)
+        return next_input if self.return_logits else self.softmax_layer(next_input)
 
 
 class TimeSelfAttention(TimeAttention):
