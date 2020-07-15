@@ -33,7 +33,9 @@ def time_attention_cbow_negative_sampling_model(max_seq_length: int,
     embedding_layer = tf.keras.layers.Embedding(vocabulary_size, concept_embedding_size, name='embedding_layer',
                                                 mask_zero=True)
 
-    time_attention_layer = TimeAttention(vocab_size=vocabulary_size, target_seq_len=1, context_seq_len=max_seq_length,
+    time_attention_layer = TimeAttention(vocab_size=vocabulary_size,
+                                         target_seq_len=1,
+                                         context_seq_len=max_seq_length,
                                          time_window_size=time_window_size)
 
     dot_layer = tf.keras.layers.Dot(axes=2)
@@ -92,7 +94,9 @@ def time_attention_cbow_model(max_seq_length: int,
     embedding_layer = tf.keras.layers.Embedding(vocabulary_size, concept_embedding_size, name='embedding_layer',
                                                 mask_zero=True)
 
-    time_embedding_layer = TimeAttention(vocab_size=vocabulary_size, target_seq_len=1, context_seq_len=max_seq_length,
+    time_embedding_layer = TimeAttention(vocab_size=vocabulary_size,
+                                         target_seq_len=1,
+                                         context_seq_len=max_seq_length,
                                          time_window_size=time_window_size)
 
     dense_layer = tf.keras.layers.Dense(vocabulary_size)
@@ -168,12 +172,11 @@ def transformer_bert_model(
         embeddings_regularizer=l2_regularizer)
 
     time_embedding_layer = TimeSelfAttention(vocab_size=vocabulary_size,
-                                             target_seq_len=max_seq_length,
-                                             context_seq_len=max_seq_length,
+                                             seq_len=max_seq_length,
                                              time_window_size=time_window_size,
-                                             return_logits=True)
+                                             self_attention_return_logits=True)
 
-    encoder_layer = Encoder(name='encoder', 
+    encoder_layer = Encoder(name='encoder',
                             num_layers=depth,
                             d_model=concept_embedding_size,
                             num_heads=num_heads,

@@ -185,18 +185,16 @@ class TimeAttention(tf.keras.layers.Layer):
                  context_seq_len: int,
                  time_window_size: int,
                  return_logits: bool = False,
-                 *args,
-                 **kwargs):
-        super().__init__(*args, **kwargs)
-
+                 *args, **kwargs):
+        super(TimeAttention, self).__init__(*args, **kwargs)
         self.vocab_size = vocab_size
         self.target_seq_len = target_seq_len
         self.context_seq_len = context_seq_len
 
         # Save the half window size
-        self.half_window_size = int(time_window_size / 2)
+        self.half_time_window_size = int(time_window_size / 2)
         # Pad one for time zero, in which the index event occurred
-        self.time_window_size = self.half_window_size * 2 + 1
+        self.time_window_size = self.half_time_window_size * 2 + 1
         self.return_logits = return_logits
 
         self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size,
@@ -226,6 +224,8 @@ class TimeAttention(tf.keras.layers.Layer):
         context_time_stamps = inputs[2]
         time_mask = inputs[3]
 
+        return_logits = kwargs.get('return_logits', False)
+
         # shape = (batch_size, target_seq_length, time_window_size)
         concept_time_embeddings = self.embedding_layer(target_concepts)
 
@@ -239,10 +239,10 @@ class TimeAttention(tf.keras.layers.Layer):
 
         # Clip the time deltas to fit the time window. E.g. if the time window is 101, the allowed time delta values
         # are between -50 to 50
-        time_delta_value_clipped = tf.clip_by_value(time_delta, clip_value_min=-self.half_window_size,
-                                                    clip_value_max=self.half_window_size)
+        time_delta_value_clipped = tf.clip_by_value(time_delta, clip_value_min=-self.half_time_window_size,
+                                                    clip_value_max=self.half_time_window_size)
         # shape = (batch_size, target_seq_length, context_seq_length, full_time_window_size)
-        time_delta_one_hot = tf.one_hot(time_delta_value_clipped + self.half_window_size, self.time_window_size)
+        time_delta_one_hot = tf.one_hot(time_delta_value_clipped + self.half_time_window_size, self.time_window_size)
 
         # shape = (batch_size, target_seq_length, time_window_size)
         normalized_concept_time_attentions = tf.math.divide_no_nan(concept_time_embeddings,
@@ -259,10 +259,27 @@ class TimeAttention(tf.keras.layers.Layer):
         if time_mask is not None:
             next_input += (tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
 
-        return next_input if self.return_logits else self.softmax_layer(next_input)
+        return next_input if return_logits else self.softmax_layer(next_input)
 
 
 class TimeSelfAttention(TimeAttention):
+
+    def __init__(self,
+                 seq_len: int,
+                 self_attention_return_logits: bool,
+                 *args, **kwargs):
+        super(TimeSelfAttention, self).__init__(target_seq_len=seq_len,
+                                                context_seq_len=seq_len,
+                                                return_logits=True,
+                                                *args, **kwargs)
+        self.seq_len = seq_len
+        self.self_attention_return_logits = self_attention_return_logits
+
+    def get_config(self):
+        config = super().get_config()
+        config['seq_len'] = self.seq_len
+        config['self_attention_return_logits'] = self.self_attention_return_logits
+        return config
 
     def call(self, inputs, **kwargs):
         """
@@ -275,7 +292,13 @@ class TimeSelfAttention(TimeAttention):
         time_stamps = inputs[1]
         mask = inputs[2]
 
-        return super().call([concept_ids, time_stamps, time_stamps, mask])
+        self_attention_logits = super().call([concept_ids, time_stamps, time_stamps, mask], return_logits=True)
+
+        # Force the model not to pay attention to the index of the sequence where the target and the context are the
+        # same
+        self_attention_logits += tf.eye(self.target_seq_len) * -1e9
+
+        return self_attention_logits if self.self_attention_return_logits else self.softmax_layer(self_attention_logits)
 
 
 get_custom_objects().update({
