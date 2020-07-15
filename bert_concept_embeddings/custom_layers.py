@@ -292,7 +292,7 @@ class TimeSelfAttention(TimeAttention):
         time_stamps = inputs[1]
         mask = inputs[2]
 
-        self_attention_logits = super().call([concept_ids, time_stamps, time_stamps, mask], return_logits=True)
+        self_attention_logits = super().call([concept_ids, time_stamps, time_stamps, mask])
 
         # Force the model not to pay attention to the index of the sequence where the target and the context are the
         # same
