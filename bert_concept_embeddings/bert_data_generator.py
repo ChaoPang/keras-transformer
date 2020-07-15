@@ -244,12 +244,19 @@ class BertBatchGenerator(BatchGenerator):
                     random.randint(0, len(concept_ids) - 1), concept_ids, dates)
 
                 if is_qualified:
+
+                    masked_concept_ids = set()
                     masked_sequence = sequence.copy()
                     output_mask = np.zeros((self.max_sequence_length,), dtype=int)
 
                     for word_pos in range(0, len(sequence)):
                         if sequence[word_pos] == self.unused_token_id:
                             break
+                        # add the masked concept id to a set because we don't allow the sane concept to be masked
+                        # twice
+                        if sequence[word_pos] in masked_concept_ids:
+                            continue
+
                         if random.random() < 0.15:
                             dice = random.random()
                             if dice < 0.8:
@@ -259,6 +266,9 @@ class BertBatchGenerator(BatchGenerator):
                                     self.first_token_id, self.last_token_id)
                             # else: 10% of the time we just leave the word as is
                             output_mask[word_pos] = 1
+
+                            # keep track of the masked concept ids
+                            masked_concept_ids.add(sequence[word_pos])
 
                     yield (output_mask, sequence, masked_sequence, time_stamp_sequence)
 
