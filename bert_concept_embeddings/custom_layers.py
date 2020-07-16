@@ -298,10 +298,11 @@ class TimeSelfAttention(TimeAttention):
         # shape = (batch_size, seq_len, seq_len)
         multiplied_target_concept_ids = tf.tile(tf.expand_dims(concept_ids, axis=-1),
                                                 tf.constant([1, 1, self.context_seq_len]))
-        attention_weights_to_modify = tf.cast(tf.equal(multiplied_target_concept_ids, concept_ids), dtype=tf.float32)
 
-        self_attention_logits -= tf.abs(
-            self_attention_logits * attention_weights_to_modify) * self.self_attention_weak_factor
+        attention_weights_to_modify = tf.cast(
+            tf.equal(multiplied_target_concept_ids, tf.expand_dims(concept_ids, axis=1)), dtype=tf.float32)
+
+        self_attention_logits -= self_attention_logits * attention_weights_to_modify * self.self_attention_weak_factor
 
         # add the mask to the scaled tensor.
         if time_mask is not None:
