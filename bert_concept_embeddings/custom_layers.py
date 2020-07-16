@@ -15,14 +15,14 @@ def scaled_dot_product_attention(q, k, v, mask, time_attention_logits=None):
     """Calculate the attention weights.
     q, k, v must have matching leading dimensions.
     k, v must have matching penultimate dimension, i.e.: seq_len_k = seq_len_v.
-    The mask has different shapes depending on its type(padding or look ahead) 
+    The mask has different shapes depending on its type(padding or look ahead)
     but it must be broadcastable for addition.
 
     Args:
     q: query shape == (..., seq_len_q, depth)
     k: key shape == (..., seq_len_k, depth)
     v: value shape == (..., seq_len_v, depth_v)
-    mask: Float tensor with shape broadcastable 
+    mask: Float tensor with shape broadcastable
           to (..., seq_len_q, seq_len_k). Defaults to None.
 
     Returns:
@@ -266,17 +266,19 @@ class TimeSelfAttention(TimeAttention):
                  target_seq_len: int,
                  context_seq_len: int,
                  self_attention_return_logits: bool,
+                 self_attention_weak_factor: float = 0.5,
                  *args, **kwargs):
-
         assert target_seq_len == context_seq_len
         super(TimeSelfAttention, self).__init__(target_seq_len=target_seq_len,
                                                 context_seq_len=context_seq_len,
                                                 *args, **kwargs)
         self.self_attention_return_logits = self_attention_return_logits
+        self.self_attention_weak_factor = self_attention_weak_factor
 
     def get_config(self):
         config = super().get_config()
         config['self_attention_return_logits'] = self.self_attention_return_logits
+        config['self_attention_weak_factor'] = self.self_attention_weak_factor
         return config
 
     def call(self, inputs, **kwargs):
@@ -288,9 +290,22 @@ class TimeSelfAttention(TimeAttention):
         """
         concept_ids = inputs[0]
         time_stamps = inputs[1]
-        mask = inputs[2]
+        time_mask = inputs[2]
 
-        self_attention_logits = super().call([concept_ids, time_stamps, time_stamps, mask])
+        # shape = (batch_size, seq_len, seq_len)
+        self_attention_logits = super().call([concept_ids, time_stamps, time_stamps, time_mask])
+
+        # shape = (batch_size, seq_len, seq_len)
+        multiplied_target_concept_ids = tf.tile(tf.expand_dims(concept_ids, axis=-1),
+                                                tf.constant([1, 1, self.context_seq_len]))
+        attention_weights_to_modify = tf.cast(
+            tf.equal(multiplied_target_concept_ids, tf.expand_dims(concept_ids, axis=1)), dtype=tf.float32)
+
+        self_attention_logits -= self_attention_logits * attention_weights_to_modify * self.self_attention_weak_factor
+
+        # add the mask to the scaled tensor.
+        if time_mask is not None:
+            self_attention_logits += (tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
 
         # Force the model not to pay attention to the index of the sequence where the target and the context are the
         # same
