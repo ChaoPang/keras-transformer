@@ -32,7 +32,7 @@ def point_wise_feed_forward_network(d_model, dff):
     ])
 
 
-def scaled_dot_product_attention(q, k, v, mask, time_attention_logits=None):
+def scaled_dot_product_attention(q, k, v, mask, time_attention_logits, fusion_gate):
     """Calculate the attention weights.
     q, k, v must have matching leading dimensions.
     k, v must have matching penultimate dimension, i.e.: seq_len_k = seq_len_v.
@@ -60,14 +60,20 @@ def scaled_dot_product_attention(q, k, v, mask, time_attention_logits=None):
     if mask is not None:
         scaled_attention_logits += (tf.cast(mask, dtype='float32') * -1e9)
 
-    if time_attention_logits is not None:
-        scaled_attention_logits += time_attention_logits
+    # if time_attention_logits is not None:
+    #     scaled_attention_logits += time_attention_logits
 
     # softmax is normalized on the last axis (seq_len_k) so that the scores
     # add up to 1.
     attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)  # (..., seq_len_q, seq_len_k)
 
-    output = tf.matmul(attention_weights, v)  # (..., seq_len_q, depth_v)
+    self_attention_output = tf.matmul(attention_weights, v)  # (..., seq_len_q, depth_v)
+
+    time_attention_weights = tf.nn.softmax(time_attention_logits, axis=-1)  # (..., seq_len_q, seq_len_k)
+
+    time_attention_output = tf.matmul(time_attention_weights, v)  # (..., seq_len_q, depth_v)
+
+    output = fusion_gate * self_attention_output + (1 - fusion_gate) * time_attention_output
 
     return output, attention_weights
 
@@ -87,7 +93,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.wq = tf.keras.layers.Dense(d_model)
         self.wk = tf.keras.layers.Dense(d_model)
         self.wv = tf.keras.layers.Dense(d_model)
-
+        self.fusion_gate = tf.Variable(initial_value=np.random.rand(), trainable=True, name='fusion_gate')
         self.dense = tf.keras.layers.Dense(d_model)
 
     def get_config(self):
@@ -116,8 +122,8 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
         # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
-        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask,
-                                                                           time_attention_logits=time_attention_logits)
+        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask, time_attention_logits,
+                                                                           self.fusion_gate)
 
         scaled_attention = tf.transpose(scaled_attention,
                                         perm=[0, 2, 1, 3])  # (batch_size, seq_len_q, num_heads, depth)
@@ -334,10 +340,6 @@ class TimeSelfAttention(TimeAttention):
         # add the mask to the scaled tensor.
         if time_mask is not None:
             self_attention_logits += (tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
-
-        # Force the model not to pay attention to the index of the sequence where the target and the context are the
-        # same
-        self_attention_logits += tf.eye(self.target_seq_len) * -1e9
 
         return self_attention_logits if self.self_attention_return_logits else self.softmax_layer(self_attention_logits)
 
