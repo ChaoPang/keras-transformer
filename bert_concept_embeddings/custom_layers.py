@@ -80,11 +80,12 @@ def scaled_dot_product_attention(q, k, v, mask, time_attention_logits, fusion_ga
 
 class MultiHeadAttention(tf.keras.layers.Layer):
 
-    def __init__(self, d_model, num_heads, **kwargs):
+    def __init__(self, d_model, num_heads, max_seq_len, **kwargs):
         super(MultiHeadAttention, self).__init__(**kwargs)
 
         self.num_heads = num_heads
         self.d_model = d_model
+        self.max_seq_len = max_seq_len
 
         assert d_model % self.num_heads == 0
 
@@ -96,10 +97,16 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.fusion_gate = tf.Variable(initial_value=np.random.rand(), trainable=True, name='fusion_gate')
         self.dense = tf.keras.layers.Dense(d_model)
 
+        self.fusion_gate = self.add_weight(name='fusion_gate',
+                                           shape=(max_seq_len, d_model),
+                                           initializer='uniform',
+                                           trainable=True)
+
     def get_config(self):
         config = super().get_config()
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
+        config['max_seq_len'] = self.max_seq_len
         return config
 
     def split_heads(self, x, batch_size):
@@ -137,15 +144,16 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
 
 class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
+    def __init__(self, d_model, num_heads, dff, max_seq_len, rate=0.1, *args, **kwargs):
         super(EncoderLayer, self).__init__(*args, **kwargs)
 
         self.d_model = d_model
         self.num_heads = num_heads
         self.dff = dff
+        self.max_seq_len = max_seq_len
         self.rate = rate
 
-        self.mha = MultiHeadAttention(d_model, num_heads)
+        self.mha = MultiHeadAttention(d_model, num_heads, max_seq_len)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -159,6 +167,7 @@ class EncoderLayer(tf.keras.layers.Layer):
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
         config['dff'] = self.dff
+        config['max_seq_len'] = self.max_seq_len
         config['rate'] = self.rate
         return config
 
@@ -187,8 +196,9 @@ class Encoder(tf.keras.layers.Layer):
         self.dff = dff
         self.dropout_rate = dropout_rate
         self.pos_encoding = positional_encoding(maximum_position_encoding, d_model)
-        self.enc_layers = [EncoderLayer(d_model, num_heads, dff, dropout_rate, name='transformer' + str(i))
-                           for i in range(num_layers)]
+        self.enc_layers = [
+            EncoderLayer(d_model, num_heads, dff, maximum_position_encoding, dropout_rate, name='transformer' + str(i))
+            for i in range(num_layers)]
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
 
     def get_config(self):
