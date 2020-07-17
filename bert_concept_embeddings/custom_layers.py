@@ -4,6 +4,27 @@ import numpy as np
 from keras.utils import get_custom_objects
 
 
+def get_angles(pos, i, d_model):
+    angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
+    return pos * angle_rates
+
+
+def positional_encoding(position, d_model):
+    angle_rads = get_angles(np.arange(position)[:, np.newaxis],
+                            np.arange(d_model)[np.newaxis, :],
+                            d_model)
+
+    # apply sin to even indices in the array; 2i
+    angle_rads[:, 0::2] = np.sin(angle_rads[:, 0::2])
+
+    # apply cos to odd indices in the array; 2i+1
+    angle_rads[:, 1::2] = np.cos(angle_rads[:, 1::2])
+
+    pos_encoding = angle_rads[np.newaxis, ...]
+
+    return tf.cast(pos_encoding, dtype=tf.float32)
+
+
 def point_wise_feed_forward_network(d_model, dff):
     return tf.keras.Sequential([
         tf.keras.layers.Dense(dff, activation='relu'),  # (batch_size, seq_len, dff)
@@ -149,14 +170,17 @@ class EncoderLayer(tf.keras.layers.Layer):
 
 
 class Encoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, d_model, num_heads, dff=2148, dropout_rate=0.1, *args, **kwargs):
+    def __init__(self, num_layers, d_model, num_heads, maximum_position_encoding, dff=2148, dropout_rate=0.1, *args,
+                 **kwargs):
         super(Encoder, self).__init__(*args, **kwargs)
 
         self.d_model = d_model
         self.num_layers = num_layers
         self.num_heads = num_heads
+        self.maximum_position_encoding = maximum_position_encoding
         self.dff = dff
         self.dropout_rate = dropout_rate
+        self.pos_encoding = positional_encoding(maximum_position_encoding, d_model)
         self.enc_layers = [EncoderLayer(d_model, num_heads, dff, dropout_rate, name='transformer' + str(i))
                            for i in range(num_layers)]
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
@@ -166,11 +190,14 @@ class Encoder(tf.keras.layers.Layer):
         config['num_layers'] = self.num_layers
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
+        config['maximum_position_encoding'] = self.maximum_position_encoding
         config['dff'] = self.dff
         config['dropout_rate'] = self.dropout_rate
         return config
 
     def call(self, x, mask, time_attention_logits, **kwargs):
+        seq_len = tf.shape(x)[1]
+        x += self.pos_encoding[:, :seq_len, :]
         attention_weights = []
         for i in range(self.num_layers):
             x, attn_weights = self.enc_layers[i](x, mask, time_attention_logits, **kwargs)

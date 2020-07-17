@@ -172,18 +172,19 @@ def transformer_bert_model(
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=l2_regularizer)
 
-    time_embedding_layer = TimeSelfAttention(vocab_size=vocabulary_size,
+    time_attention_layer = TimeSelfAttention(vocab_size=vocabulary_size,
                                              target_seq_len=max_seq_length,
                                              context_seq_len=max_seq_length,
                                              time_window_size=time_window_size,
                                              return_logits=True,
                                              self_attention_return_logits=True)
 
-    encoder_layer = Encoder(name='encoder',
-                            num_layers=depth,
-                            d_model=concept_embedding_size,
-                            num_heads=num_heads,
-                            dropout_rate=transformer_dropout)
+    encoder = Encoder(name='encoder',
+                      num_layers=depth,
+                      d_model=concept_embedding_size,
+                      num_heads=num_heads,
+                      maximum_position_encoding=max_seq_length,
+                      dropout_rate=transformer_dropout)
 
     output_layer = TiedOutputEmbedding(
         projection_regularizer=l2_regularizer,
@@ -192,19 +193,19 @@ def transformer_bert_model(
 
     softmax_layer = tf.keras.layers.Softmax(name='concept_predictions')
 
-    coordinate_embedding_layer = TransformerCoordinateEmbedding(1, name='coordinate_embedding')
+    # coordinate_embedding_layer = TransformerCoordinateEmbedding(1, name='coordinate_embedding')
 
     next_step_input, embedding_matrix = embedding_layer(masked_concept_ids)
 
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
-    next_step_input = coordinate_embedding_layer(next_step_input, step=0)
+    # next_step_input = coordinate_embedding_layer(next_step_input, step=0)
     # shape = (batch_size, seq_len, seq_len)
-    time_attention = time_embedding_layer([concept_ids, time_stamps, mask])
+    time_attention = time_attention_layer([concept_ids, time_stamps, mask])
     # pad a dimension to accommodate the head split
     time_attention = tf.expand_dims(time_attention, axis=1)
 
-    next_step_input, _ = encoder_layer(next_step_input, concept_mask, time_attention)
+    next_step_input, _ = encoder(next_step_input, concept_mask, time_attention)
 
     concept_predictions = softmax_layer(
         output_layer([next_step_input, embedding_matrix]))
