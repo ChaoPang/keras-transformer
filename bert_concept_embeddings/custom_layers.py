@@ -325,6 +325,7 @@ class TimeSelfAttention(TimeAttention):
         # shape = (batch_size, seq_len, seq_len)
         multiplied_target_concept_ids = tf.tile(tf.expand_dims(concept_ids, axis=-1),
                                                 tf.constant([1, 1, self.context_seq_len]))
+
         attention_weights_to_modify = tf.cast(
             tf.equal(multiplied_target_concept_ids, tf.expand_dims(concept_ids, axis=1)), dtype=tf.float32)
 
