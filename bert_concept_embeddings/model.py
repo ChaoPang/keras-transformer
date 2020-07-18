@@ -183,7 +183,7 @@ def transformer_bert_model(
                       num_layers=depth,
                       d_model=concept_embedding_size,
                       num_heads=num_heads,
-                      maximum_position_encoding=max_seq_length,
+                      max_seq_len=max_seq_length,
                       dropout_rate=transformer_dropout)
 
     output_layer = TiedOutputEmbedding(
