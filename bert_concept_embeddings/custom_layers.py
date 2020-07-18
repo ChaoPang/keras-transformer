@@ -97,10 +97,9 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.fusion_gate = tf.Variable(initial_value=np.random.rand(), trainable=True, name='fusion_gate')
         self.dense = tf.keras.layers.Dense(d_model)
 
-        self.fusion_gate = self.add_weight(name=self.name + '_fusion_gate',
-                                           shape=(self.max_seq_len, self.depth),
-                                           initializer='uniform',
-                                           trainable=True)
+        self.fusion_gate = tf.Variable(name=self.name + '_fusion_gate',
+                                       initial_value=np.random.rand(),
+                                       trainable=True)
 
     def get_config(self):
         config = super().get_config()
