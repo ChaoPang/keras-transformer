@@ -32,7 +32,7 @@ def point_wise_feed_forward_network(d_model, dff):
     ])
 
 
-def scaled_dot_product_attention(q, k, v, mask, time_attention_logits, fusion_gate):
+def scaled_dot_product_attention(q, k, v, mask, time_attention_logits):
     """Calculate the attention weights.
     q, k, v must have matching leading dimensions.
     k, v must have matching penultimate dimension, i.e.: seq_len_k = seq_len_v.
@@ -60,32 +60,25 @@ def scaled_dot_product_attention(q, k, v, mask, time_attention_logits, fusion_ga
     if mask is not None:
         scaled_attention_logits += (tf.cast(mask, dtype='float32') * -1e9)
 
-    # if time_attention_logits is not None:
-    #     scaled_attention_logits += time_attention_logits
+    if time_attention_logits is not None:
+        scaled_attention_logits += time_attention_logits
 
     # softmax is normalized on the last axis (seq_len_k) so that the scores
     # add up to 1.
     attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)  # (..., seq_len_q, seq_len_k)
 
-    self_attention_output = tf.matmul(attention_weights, v)  # (..., seq_len_q, depth_v)
-
-    time_attention_weights = tf.nn.softmax(time_attention_logits, axis=-1)  # (..., seq_len_q, seq_len_k)
-
-    time_attention_output = tf.matmul(time_attention_weights, v)  # (..., seq_len_q, depth_v)
-
-    output = fusion_gate * self_attention_output + (1 - fusion_gate) * time_attention_output
+    output = tf.matmul(attention_weights, v)  # (..., seq_len_q, depth_v)
 
     return output, attention_weights
 
 
 class MultiHeadAttention(tf.keras.layers.Layer):
 
-    def __init__(self, d_model, num_heads, max_seq_len, **kwargs):
+    def __init__(self, d_model, num_heads, **kwargs):
         super(MultiHeadAttention, self).__init__(**kwargs)
 
         self.num_heads = num_heads
         self.d_model = d_model
-        self.max_seq_len = max_seq_len
 
         assert d_model % self.num_heads == 0
 
@@ -97,15 +90,10 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.fusion_gate = tf.Variable(initial_value=np.random.rand(), trainable=True, name='fusion_gate')
         self.dense = tf.keras.layers.Dense(d_model)
 
-        self.fusion_gate = tf.Variable(name=self.name + '_fusion_gate',
-                                       initial_value=np.random.rand(),
-                                       trainable=True)
-
     def get_config(self):
         config = super().get_config()
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
-        config['max_seq_len'] = self.max_seq_len
         return config
 
     def split_heads(self, x, batch_size):
@@ -128,8 +116,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
         # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
-        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask, time_attention_logits,
-                                                                           self.fusion_gate)
+        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask, time_attention_logits)
 
         scaled_attention = tf.transpose(scaled_attention,
                                         perm=[0, 2, 1, 3])  # (batch_size, seq_len_q, num_heads, depth)
@@ -143,16 +130,15 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
 
 class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, max_seq_len, rate=0.1, *args, **kwargs):
+    def __init__(self, d_model, num_heads, dff, rate=0.1, *args, **kwargs):
         super(EncoderLayer, self).__init__(*args, **kwargs)
 
         self.d_model = d_model
         self.num_heads = num_heads
         self.dff = dff
-        self.max_seq_len = max_seq_len
         self.rate = rate
 
-        self.mha = MultiHeadAttention(d_model, num_heads, max_seq_len)
+        self.mha = MultiHeadAttention(d_model, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -166,7 +152,6 @@ class EncoderLayer(tf.keras.layers.Layer):
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
         config['dff'] = self.dff
-        config['max_seq_len'] = self.max_seq_len
         config['rate'] = self.rate
         return config
 
@@ -184,18 +169,17 @@ class EncoderLayer(tf.keras.layers.Layer):
 
 
 class Encoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, d_model, num_heads, max_seq_len, dff=2148, dropout_rate=0.1, *args,
+    def __init__(self, num_layers, d_model, num_heads, dff=2148, dropout_rate=0.1, *args,
                  **kwargs):
         super(Encoder, self).__init__(*args, **kwargs)
 
         self.d_model = d_model
         self.num_layers = num_layers
         self.num_heads = num_heads
-        self.maximum_position_encoding = max_seq_len
         self.dff = dff
         self.dropout_rate = dropout_rate
         self.enc_layers = [
-            EncoderLayer(d_model, num_heads, dff, max_seq_len, dropout_rate, name='transformer' + str(i))
+            EncoderLayer(d_model, num_heads, dff, dropout_rate, name='transformer' + str(i))
             for i in range(num_layers)]
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
 
@@ -204,7 +188,6 @@ class Encoder(tf.keras.layers.Layer):
         config['num_layers'] = self.num_layers
         config['d_model'] = self.d_model
         config['num_heads'] = self.num_heads
-        config['maximum_position_encoding'] = self.maximum_position_encoding
         config['dff'] = self.dff
         config['dropout_rate'] = self.dropout_rate
         return config
@@ -212,7 +195,10 @@ class Encoder(tf.keras.layers.Layer):
     def call(self, x, mask, time_attention_logits, **kwargs):
         attention_weights = []
         for i in range(self.num_layers):
-            x, attn_weights = self.enc_layers[i](x, mask, time_attention_logits, **kwargs)
+            if i == 0:
+                x, attn_weights = self.enc_layers[i](x, mask, time_attention_logits, **kwargs)
+            else:
+                x, attn_weights = self.enc_layers[i](x, mask, None, **kwargs)
             attention_weights.append(attn_weights)
         return x, tf.stack(attention_weights, axis=0)  # (batch_size, input_seq_len, d_model)
 
@@ -305,19 +291,20 @@ class TimeSelfAttention(TimeAttention):
                  target_seq_len: int,
                  context_seq_len: int,
                  self_attention_return_logits: bool,
-                 self_attention_weak_factor: float = 0.5,
                  *args, **kwargs):
         assert target_seq_len == context_seq_len
         super(TimeSelfAttention, self).__init__(target_seq_len=target_seq_len,
                                                 context_seq_len=context_seq_len,
                                                 *args, **kwargs)
+
         self.self_attention_return_logits = self_attention_return_logits
-        self.self_attention_weak_factor = self_attention_weak_factor
+        self.self_attention_factor = tf.Variable(name='self_attention_factor',
+                                                 initial_value=np.random.rand(),
+                                                 trainable=True)
 
     def get_config(self):
         config = super().get_config()
         config['self_attention_return_logits'] = self.self_attention_return_logits
-        config['self_attention_weak_factor'] = self.self_attention_weak_factor
         return config
 
     def call(self, inputs, **kwargs):
@@ -334,22 +321,14 @@ class TimeSelfAttention(TimeAttention):
         # shape = (batch_size, seq_len, seq_len)
         self_attention_logits = super().call([concept_ids, time_stamps, time_stamps, time_mask])
 
-        # shape = (batch_size, seq_len, seq_len)
-        multiplied_target_concept_ids = tf.tile(tf.expand_dims(concept_ids, axis=-1),
-                                                tf.constant([1, 1, self.context_seq_len]))
-
-        attention_weights_to_modify = tf.cast(
-            tf.equal(multiplied_target_concept_ids, tf.expand_dims(concept_ids, axis=1)), dtype=tf.float32)
-
-        self_attention_logits -= self_attention_logits * attention_weights_to_modify * self.self_attention_weak_factor
-
         # add the mask to the scaled tensor.
         if time_mask is not None:
             self_attention_logits += (tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
 
-        # Force the model not to pay attention to the index of the sequence where the target and the context are the
-        # same
-        self_attention_logits += tf.eye(self.target_seq_len) * -1e9
+        if kwargs.get('training'):
+            # Force the model not to pay attention to the index of the sequence where the target and the context are the
+            # same
+            self_attention_logits -= tf.eye(self.target_seq_len) * self_attention_logits * self.self_attention_factor
 
         return self_attention_logits if self.self_attention_return_logits else self.softmax_layer(self_attention_logits)
 
