@@ -340,10 +340,6 @@ class TimeSelfAttention(TimeAttention):
         if time_mask is not None:
             self_attention_logits += (tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
 
-        # Force the model not to pay attention to the index of the sequence where the target and the context are the
-        # same
-        self_attention_logits += tf.eye(self.target_seq_len) * -1e9
-
         return self_attention_logits if self.self_attention_return_logits else self.softmax_layer(self_attention_logits)
 
 
