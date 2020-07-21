@@ -60,16 +60,14 @@ def scaled_dot_product_attention(q, k, v, mask, time_attention_logits, fusion_ga
     if mask is not None:
         scaled_attention_logits += (tf.cast(mask, dtype='float32') * -1e9)
 
+    if time_attention_logits is not None:
+        scaled_attention_logits += time_attention_logits
+
     # softmax is normalized on the last axis (seq_len_k) so that the scores
     # add up to 1.
     attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)  # (..., seq_len_q, seq_len_k)
 
     output = tf.matmul(attention_weights, v)  # (..., seq_len_q, depth_v)
-
-    if time_attention_logits is not None:
-        time_attention_weights = tf.nn.softmax(time_attention_logits, axis=-1)  # (..., seq_len_q, seq_len_k)
-        time_attention_output = tf.matmul(time_attention_weights, v)  # (..., seq_len_q, depth_v)
-        output = fusion_gate * output + (1 - fusion_gate) * time_attention_output
 
     return output, attention_weights
 
@@ -202,10 +200,7 @@ class Encoder(tf.keras.layers.Layer):
     def call(self, x, mask, time_attention_logits, **kwargs):
         attention_weights = []
         for i in range(self.num_layers):
-            if i == 0:
-                x, attn_weights = self.enc_layers[i](x, mask, time_attention_logits, **kwargs)
-            else:
-                x, attn_weights = self.enc_layers[i](x, mask, None, **kwargs)
+            x, attn_weights = self.enc_layers[i](x, mask, time_attention_logits, **kwargs)
             attention_weights.append(attn_weights)
         return x, tf.stack(attention_weights, axis=0)  # (batch_size, input_seq_len, d_model)
 
@@ -339,10 +334,6 @@ class TimeSelfAttention(TimeAttention):
         # add the mask to the scaled tensor.
         if time_mask is not None:
             self_attention_logits += (tf.cast(tf.expand_dims(time_mask, axis=1), dtype='float32') * -1e9)
-
-        # Force the model not to pay attention to the index of the sequence where the target and the context are the
-        # same
-        self_attention_logits += tf.eye(self.target_seq_len) * -1e9
 
         return self_attention_logits if self.self_attention_return_logits else self.softmax_layer(self_attention_logits)
 
