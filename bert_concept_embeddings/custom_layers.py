@@ -227,7 +227,8 @@ class TimeAttention(tf.keras.layers.Layer):
         self.embedding_layer = tf.keras.layers.Embedding(self.vocab_size,
                                                          self.time_window_size,
                                                          embeddings_initializer=tf.keras.initializers.zeros,
-                                                         name='time_attention_embedding')
+                                                         name='time_attention_embedding',
+                                                         trainable=kwargs.get('trainable'))
         self.softmax_layer = tf.keras.layers.Softmax()
 
     def get_config(self):

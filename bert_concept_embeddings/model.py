@@ -139,7 +139,8 @@ def transformer_bert_model(
         num_heads: int,
         transformer_dropout: float = 0.1,
         embedding_dropout: float = 0.6,
-        l2_reg_penalty: float = 1e-4):
+        l2_reg_penalty: float = 1e-4,
+        time_attention_trainable=True):
     """
     Builds a BERT-based model (Bidirectional Encoder Representations
     from Transformers) following paper "BERT: Pre-training of Deep
@@ -177,7 +178,8 @@ def transformer_bert_model(
                                              context_seq_len=max_seq_length,
                                              time_window_size=time_window_size,
                                              return_logits=True,
-                                             self_attention_return_logits=True)
+                                             self_attention_return_logits=True,
+                                             trainable=time_attention_trainable)
 
     encoder = Encoder(name='encoder',
                       num_layers=depth,
