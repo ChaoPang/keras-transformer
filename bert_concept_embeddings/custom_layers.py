@@ -32,7 +32,7 @@ def point_wise_feed_forward_network(d_model, dff):
     ])
 
 
-def scaled_dot_product_attention(q, k, v, mask, time_attention_logits, fusion_gate):
+def scaled_dot_product_attention(q, k, v, mask, time_attention_logits):
     """Calculate the attention weights.
     q, k, v must have matching leading dimensions.
     k, v must have matching penultimate dimension, i.e.: seq_len_k = seq_len_v.
@@ -89,10 +89,6 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.wv = tf.keras.layers.Dense(d_model)
         self.dense = tf.keras.layers.Dense(d_model)
 
-        self.fusion_gate = tf.Variable(name=self.name + '_fusion_gate',
-                                       initial_value=np.random.rand(),
-                                       trainable=True)
-
     def get_config(self):
         config = super().get_config()
         config['d_model'] = self.d_model
@@ -119,8 +115,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
         # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
-        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask, time_attention_logits,
-                                                                           self.fusion_gate)
+        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask, time_attention_logits)
 
         scaled_attention = tf.transpose(scaled_attention,
                                         perm=[0, 2, 1, 3])  # (batch_size, seq_len_q, num_heads, depth)
@@ -199,10 +194,7 @@ class Encoder(tf.keras.layers.Layer):
     def call(self, x, mask, time_attention_logits, **kwargs):
         attention_weights = []
         for i in range(self.num_layers):
-            if i == 0:
-                x, attn_weights = self.enc_layers[i](x, mask, time_attention_logits, **kwargs)
-            else:
-                x, attn_weights = self.enc_layers[i](x, mask, None, **kwargs)
+            x, attn_weights = self.enc_layers[i](x, mask, time_attention_logits, **kwargs)
             attention_weights.append(attn_weights)
         return x, tf.stack(attention_weights, axis=0)  # (batch_size, input_seq_len, d_model)
 
@@ -295,19 +287,16 @@ class TimeSelfAttention(TimeAttention):
                  target_seq_len: int,
                  context_seq_len: int,
                  self_attention_return_logits: bool,
-                 self_attention_weak_factor: float = 0.5,
                  *args, **kwargs):
         assert target_seq_len == context_seq_len
         super(TimeSelfAttention, self).__init__(target_seq_len=target_seq_len,
                                                 context_seq_len=context_seq_len,
                                                 *args, **kwargs)
         self.self_attention_return_logits = self_attention_return_logits
-        self.self_attention_weak_factor = self_attention_weak_factor
 
     def get_config(self):
         config = super().get_config()
         config['self_attention_return_logits'] = self.self_attention_return_logits
-        config['self_attention_weak_factor'] = self.self_attention_weak_factor
         return config
 
     def call(self, inputs, **kwargs):
@@ -323,15 +312,6 @@ class TimeSelfAttention(TimeAttention):
 
         # shape = (batch_size, seq_len, seq_len)
         self_attention_logits = super().call([concept_ids, time_stamps, time_stamps, time_mask])
-
-        # shape = (batch_size, seq_len, seq_len)
-        multiplied_target_concept_ids = tf.tile(tf.expand_dims(concept_ids, axis=-1),
-                                                tf.constant([1, 1, self.context_seq_len]))
-
-        attention_weights_to_modify = tf.cast(
-            tf.equal(multiplied_target_concept_ids, tf.expand_dims(concept_ids, axis=1)), dtype=tf.float32)
-
-        self_attention_logits -= self_attention_logits * attention_weights_to_modify * self.self_attention_weak_factor
 
         # add the mask to the scaled tensor.
         if time_mask is not None:
