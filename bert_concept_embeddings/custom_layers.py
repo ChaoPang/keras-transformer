@@ -61,7 +61,7 @@ def scaled_dot_product_attention(q, k, v, mask, time_attention_logits):
         scaled_attention_logits += (tf.cast(mask, dtype='float32') * -1e9)
 
     if time_attention_logits is not None:
-        scaled_attention_logits *= tf.nn.softmax(time_attention_logits)
+        scaled_attention_logits *= time_attention_logits
 
     # softmax is normalized on the last axis (seq_len_k) so that the scores
     # add up to 1.
