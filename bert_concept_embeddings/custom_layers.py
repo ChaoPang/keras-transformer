@@ -60,16 +60,14 @@ def scaled_dot_product_attention(q, k, v, mask, time_attention_logits, fusion_ga
     if mask is not None:
         scaled_attention_logits += (tf.cast(mask, dtype='float32') * -1e9)
 
+    if time_attention_logits is not None:
+        scaled_attention_logits *= tf.nn.softmax(time_attention_logits)
+
     # softmax is normalized on the last axis (seq_len_k) so that the scores
     # add up to 1.
     attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)  # (..., seq_len_q, seq_len_k)
 
     output = tf.matmul(attention_weights, v)  # (..., seq_len_q, depth_v)
-
-    if time_attention_logits is not None:
-        time_attention_weights = tf.nn.softmax(time_attention_logits, axis=-1)  # (..., seq_len_q, seq_len_k)
-        time_attention_output = tf.matmul(time_attention_weights, v)  # (..., seq_len_q, depth_v)
-        output = fusion_gate * output + (1 - fusion_gate) * time_attention_output
 
     return output, attention_weights
 
@@ -89,7 +87,6 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.wq = tf.keras.layers.Dense(d_model)
         self.wk = tf.keras.layers.Dense(d_model)
         self.wv = tf.keras.layers.Dense(d_model)
-        self.fusion_gate = tf.Variable(initial_value=np.random.rand(), trainable=True, name='fusion_gate')
         self.dense = tf.keras.layers.Dense(d_model)
 
         self.fusion_gate = tf.Variable(name=self.name + '_fusion_gate',
