@@ -288,19 +288,16 @@ class TimeSelfAttention(TimeAttention):
                  target_seq_len: int,
                  context_seq_len: int,
                  self_attention_return_logits: bool,
-                 self_attention_weak_factor: float = 0.5,
                  *args, **kwargs):
         assert target_seq_len == context_seq_len
         super(TimeSelfAttention, self).__init__(target_seq_len=target_seq_len,
                                                 context_seq_len=context_seq_len,
                                                 *args, **kwargs)
         self.self_attention_return_logits = self_attention_return_logits
-        self.self_attention_weak_factor = self_attention_weak_factor
 
     def get_config(self):
         config = super().get_config()
         config['self_attention_return_logits'] = self.self_attention_return_logits
-        config['self_attention_weak_factor'] = self.self_attention_weak_factor
         return config
 
     def call(self, inputs, **kwargs):
@@ -316,15 +313,6 @@ class TimeSelfAttention(TimeAttention):
 
         # shape = (batch_size, seq_len, seq_len)
         self_attention_logits = super().call([concept_ids, time_stamps, time_stamps, time_mask])
-
-        # shape = (batch_size, seq_len, seq_len)
-        multiplied_target_concept_ids = tf.tile(tf.expand_dims(concept_ids, axis=-1),
-                                                tf.constant([1, 1, self.context_seq_len]))
-
-        attention_weights_to_modify = tf.cast(
-            tf.equal(multiplied_target_concept_ids, tf.expand_dims(concept_ids, axis=1)), dtype=tf.float32)
-
-        self_attention_logits -= self_attention_logits * attention_weights_to_modify * self.self_attention_weak_factor
 
         # add the mask to the scaled tensor.
         if time_mask is not None:
