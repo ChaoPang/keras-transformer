@@ -206,7 +206,7 @@ def transformer_bert_model(
     # pad a dimension to accommodate the head split
     time_attention = tf.expand_dims(time_attention, axis=1)
 
-    next_step_input, _ = encoder(next_step_input, concept_mask, None)
+    next_step_input, _ = encoder(next_step_input, concept_mask, time_attention)
 
     concept_predictions = softmax_layer(
         output_layer([next_step_input, embedding_matrix]))
