@@ -199,6 +199,28 @@ class Encoder(tf.keras.layers.Layer):
         return x, tf.stack(attention_weights, axis=0)  # (batch_size, input_seq_len, d_model)
 
 
+class VisitEmbeddingLayer(tf.keras.layers.Layer):
+
+    def __init__(self, visit_order_size: int,
+                 embedding_size: int, *args, **kwargs):
+        super(VisitEmbeddingLayer, self).__init__(*args, **kwargs)
+        self.visit_order_size = visit_order_size
+        self.embedding_size = embedding_size
+
+        self.visit_embedding_layer = tf.keras.layers.Embedding(self.visit_order_size,
+                                                               self.embedding_size)
+
+    def get_config(self):
+        config = super().get_config()
+        config['visit_order_size'] = self.visit_order_size
+        config['embedding_size'] = self.embedding_size
+        return config
+
+    def call(self, inputs, **kwargs):
+        visit_orders, concept_embeddings = inputs
+        return self.visit_embedding_layer(visit_orders) + concept_embeddings
+
+
 class TimeAttention(tf.keras.layers.Layer):
 
     def __init__(self, vocab_size: int,
@@ -323,5 +345,6 @@ get_custom_objects().update({
     'EncoderLayer': EncoderLayer,
     'TimeAttention': TimeAttention,
     'TimeSelfAttention': TimeSelfAttention,
-    'PairwiseTimeAttention': TimeSelfAttention
+    'PairwiseTimeAttention': TimeSelfAttention,
+    'VisitEmbeddingLayer': VisitEmbeddingLayer
 })

@@ -1,12 +1,10 @@
-import tensorflow as tf
 # +
 import tensorflow as tf
-from docutils.nodes import target
 
 from keras_transformer.extras import ReusableEmbedding, TiedOutputEmbedding
 from keras_transformer.position import TransformerCoordinateEmbedding
 
-from bert_concept_embeddings.custom_layers import EncoderLayer, TimeSelfAttention, TimeAttention, Encoder
+from bert_concept_embeddings.custom_layers import VisitEmbeddingLayer, TimeSelfAttention, TimeAttention, Encoder
 
 
 def time_attention_cbow_negative_sampling_model(max_seq_length: int,
@@ -158,6 +156,8 @@ def transformer_bert_model(
 
     time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='time_stamps')
 
+    visit_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='visit_orders')
+
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
 
     concept_mask = tf.expand_dims(tf.expand_dims(mask, axis=1), axis=1)
@@ -172,6 +172,9 @@ def transformer_bert_model(
         # Regularization Strategies for Embedding-based Neural Networks"
         # https://arxiv.org/pdf/1508.03721.pdf
         embeddings_regularizer=l2_regularizer)
+
+    visit_embedding_layer = VisitEmbeddingLayer(visit_order_size=max_seq_length,
+                                                embedding_size=concept_embedding_size)
 
     time_attention_layer = TimeSelfAttention(vocab_size=vocabulary_size,
                                              target_seq_len=max_seq_length,
@@ -194,13 +197,13 @@ def transformer_bert_model(
 
     softmax_layer = tf.keras.layers.Softmax(name='concept_predictions')
 
-    coordinate_embedding_layer = TransformerCoordinateEmbedding(1, name='coordinate_embedding')
+    # coordinate_embedding_layer = TransformerCoordinateEmbedding(1, name='coordinate_embedding')
 
     next_step_input, embedding_matrix = embedding_layer(masked_concept_ids)
 
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
-    next_step_input = coordinate_embedding_layer(next_step_input, step=0)
+    next_step_input = visit_embedding_layer([visit_orders, next_step_input])
     # shape = (batch_size, seq_len, seq_len)
     time_attention = time_attention_layer([concept_ids, time_stamps, mask])
     # pad a dimension to accommodate the head split
@@ -212,7 +215,7 @@ def transformer_bert_model(
         output_layer([next_step_input, embedding_matrix]))
 
     model = tf.keras.Model(
-        inputs=[masked_concept_ids, concept_ids, time_stamps, mask],
+        inputs=[masked_concept_ids, concept_ids, time_stamps, visit_orders, mask],
         outputs=[concept_predictions])
 
     return model

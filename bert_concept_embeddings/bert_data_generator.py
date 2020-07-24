@@ -109,40 +109,51 @@ class BatchGenerator:
         while True:
             for tup in self.patient_event_sequence.itertuples():
                 concept_ids, dates = zip(*sorted(zip(tup.token_ids, tup.dates), key=lambda tup2: tup2[1]))
+                sorted_tup = (concept_ids, dates)
                 for i, concept_id in enumerate(concept_ids):
 
                     target_concepts = [concept_id]
                     target_time_stamps = [dates[i]]
 
                     is_qualified, context_concepts, context_time_stamps = self.extract_concepts_time_stamps(i,
-                                                                                                            concept_ids,
-                                                                                                            dates)
+                                                                                                            sorted_tup)
 
                     if is_qualified:
                         yield (
                             target_concepts, target_time_stamps, context_concepts,
                             context_time_stamps, target_concepts)
 
-    def extract_concepts_time_stamps(self, i, concept_ids, dates):
+    def extract_concepts_time_stamps(self, i, sorted_tup):
 
-        half_window_size = int(self.max_sequence_length / 2)
-        half_time_window = int(self.time_window_size / 2)
-
-        left_index = i - half_window_size if i - half_window_size > 0 else 0
-        right_index = i + 1 + half_window_size
+        concept_ids, dates = sorted_tup
+        left_index, right_index = self.compute_index_bounds(i)
 
         sequence = np.asarray(concept_ids[left_index: i] + concept_ids[i + 1: right_index])
         time_stamp_sequence = np.asarray(dates[left_index: i] + dates[i + 1: right_index])
 
-        time_deltas = time_stamp_sequence - dates[i]
-
-        qualified_indexes = np.squeeze(np.argwhere(
-            (time_deltas >= -half_time_window) & (time_deltas <= half_time_window)), axis=-1)
+        qualified_indexes = self.qualified_indexes(dates[i], time_stamp_sequence)
 
         if len(qualified_indexes) > self.minimum_num_of_concepts:
             return True, sequence[qualified_indexes], time_stamp_sequence[qualified_indexes]
 
         return False, None, None
+
+    def qualified_indexes(self, date, time_stamp_sequence):
+        half_time_window = self.half_time_window()
+        time_deltas = time_stamp_sequence - date
+        qualified_indexes = np.squeeze(np.argwhere(
+            (time_deltas >= -half_time_window) & (time_deltas <= half_time_window)), axis=-1)
+        return qualified_indexes
+
+    def compute_index_bounds(self, i):
+        half_window_size = int(self.max_sequence_length / 2)
+        left_index = i - half_window_size if i - half_window_size > 0 else 0
+        right_index = i + 1 + half_window_size
+        return left_index, right_index
+
+    def get_half_time_window(self):
+        half_time_window = int(self.time_window_size / 2)
+        return half_time_window
 
     def get_steps_per_epoch(self):
         return self.estimate_data_size() // self.batch_size
@@ -217,7 +228,8 @@ class BertBatchGenerator(BatchGenerator):
         training_example_generator = self.data_generator()
         while True:
             next_bunch_of_examples = islice(training_example_generator, self.batch_size)
-            output_mask, sequence, masked_sequence, time_stamp_sequence = zip(*list(next_bunch_of_examples))
+            output_mask, sequence, masked_sequence, time_stamp_sequence, visit_order_sequence = zip(
+                *list(next_bunch_of_examples))
 
             sequence = pad_sequences(np.asarray(sequence), maxlen=self.max_sequence_length, padding='post',
                                      value=self.unused_token_id, dtype='int32')
@@ -225,37 +237,52 @@ class BertBatchGenerator(BatchGenerator):
                                             padding='post', value=self.unused_token_id, dtype='int32')
             time_stamp_sequence = pad_sequences(np.asarray(time_stamp_sequence), maxlen=self.max_sequence_length,
                                                 padding='post', value=0, dtype='int32')
+            visit_order_sequence = pad_sequences(np.asarray(visit_order_sequence), maxlen=self.max_sequence_length,
+                                                 padding='post', value=0, dtype='int32')
             mask = (sequence == self.unused_token_id).astype(int)
             combined_label = np.stack([sequence, output_mask], axis=-1)
 
             yield ({'masked_concept_ids': masked_sequence,
                     'concept_ids': sequence,
                     'time_stamps': time_stamp_sequence,
+                    'visit_orders': visit_order_sequence,
                     'mask': mask}, combined_label)
+
+    def extract_concepts_time_stamps(self, i, tup):
+
+        concept_ids, dates, concept_id_visit_orders = zip(
+            *sorted(zip(tup.token_ids, tup.dates, tup.concept_id_visit_orders), key=lambda tup2: (tup2[1],
+                                                                                                  tup2[2])))
+        left_index, right_index = self.compute_index_bounds(i)
+
+        sequence = np.asarray(concept_ids[left_index: right_index])
+        time_stamp_sequence = np.asarray(dates[left_index: right_index])
+        visit_order_sequence = np.asarray(concept_id_visit_orders[left_index: right_index])
+        qualified_indexes = self.qualified_indexes(dates[i], time_stamp_sequence)
+
+        if len(qualified_indexes) > self.minimum_num_of_concepts:
+            sequence = sequence[qualified_indexes]
+            time_stamp_sequence = time_stamp_sequence[qualified_indexes]
+            visit_order_sequence = visit_order_sequence[qualified_indexes]
+            return True, sequence, time_stamp_sequence, visit_order_sequence
+
+        return False, None, None, None
 
     def data_generator(self):
 
         while True:
             for tup in self.patient_event_sequence.itertuples():
 
-                concept_ids, dates = zip(*sorted(zip(tup.token_ids, tup.dates), key=lambda tup2: tup2[1]))
-
-                is_qualified, sequence, time_stamp_sequence = self.extract_concepts_time_stamps(
-                    random.randint(0, len(concept_ids) - 1), concept_ids, dates)
+                (is_qualified, sequence, time_stamp_sequence, visit_order_sequence) = self.extract_concepts_time_stamps(
+                    random.randint(0, len(tup.concept_ids) - 1), tup)
 
                 if is_qualified:
-
-                    masked_concept_ids = set()
                     masked_sequence = sequence.copy()
                     output_mask = np.zeros((self.max_sequence_length,), dtype=int)
 
                     for word_pos in range(0, len(sequence)):
                         if sequence[word_pos] == self.unused_token_id:
                             break
-                        # add the masked concept id to a set because we don't allow the sane concept to be masked
-                        # twice
-                        if sequence[word_pos] in masked_concept_ids:
-                            continue
 
                         if random.random() < 0.15:
                             dice = random.random()
@@ -267,10 +294,7 @@ class BertBatchGenerator(BatchGenerator):
                             # else: 10% of the time we just leave the word as is
                             output_mask[word_pos] = 1
 
-                            # keep track of the masked concept ids
-                            masked_concept_ids.add(sequence[word_pos])
-
-                    yield (output_mask, sequence, masked_sequence, time_stamp_sequence)
+                    yield (output_mask, sequence, masked_sequence, time_stamp_sequence, visit_order_sequence)
 
     def estimate_data_size(self):
         return len(self.patient_event_sequence)
