@@ -79,9 +79,6 @@ dataset = tf.data.Dataset.from_generator(data_generator.batch_generator,
                                                         'time_stamps': tf.int32,
                                                         'mask': tf.int32}, tf.int32))
 
-dataset = dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()
-dataset = dataset.shuffle(5).prefetch(tf.data.experimental.AUTOTUNE)
-
 another_strategy = tf.distribute.OneDeviceStrategy("/cpu:0")
 with another_strategy.scope():
     time_attention_model = tf.keras.models.load_model(time_attention_model_path,

@@ -32,7 +32,7 @@ def point_wise_feed_forward_network(d_model, dff):
     ])
 
 
-def scaled_dot_product_attention(q, k, v, mask, time_attention_logits, fusion_gate):
+def scaled_dot_product_attention(q, k, v, mask, time_attention_logits):
     """Calculate the attention weights.
     q, k, v must have matching leading dimensions.
     k, v must have matching penultimate dimension, i.e.: seq_len_k = seq_len_v.
@@ -87,12 +87,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.wq = tf.keras.layers.Dense(d_model)
         self.wk = tf.keras.layers.Dense(d_model)
         self.wv = tf.keras.layers.Dense(d_model)
-        self.fusion_gate = tf.Variable(initial_value=np.random.rand(), trainable=True, name='fusion_gate')
         self.dense = tf.keras.layers.Dense(d_model)
-
-        self.fusion_gate = tf.Variable(name=self.name + '_fusion_gate',
-                                       initial_value=np.random.rand(),
-                                       trainable=True)
 
     def get_config(self):
         config = super().get_config()
@@ -120,8 +115,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
         # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
-        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask, time_attention_logits,
-                                                                           self.fusion_gate)
+        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask, time_attention_logits)
 
         scaled_attention = tf.transpose(scaled_attention,
                                         perm=[0, 2, 1, 3])  # (batch_size, seq_len_q, num_heads, depth)

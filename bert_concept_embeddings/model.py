@@ -194,19 +194,19 @@ def transformer_bert_model(
 
     softmax_layer = tf.keras.layers.Softmax(name='concept_predictions')
 
-    # coordinate_embedding_layer = TransformerCoordinateEmbedding(1, name='coordinate_embedding')
+    coordinate_embedding_layer = TransformerCoordinateEmbedding(1, name='coordinate_embedding')
 
     next_step_input, embedding_matrix = embedding_layer(masked_concept_ids)
 
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
-    # next_step_input = coordinate_embedding_layer(next_step_input, step=0)
+    next_step_input = coordinate_embedding_layer(next_step_input, step=0)
     # shape = (batch_size, seq_len, seq_len)
     time_attention = time_attention_layer([concept_ids, time_stamps, mask])
     # pad a dimension to accommodate the head split
     time_attention = tf.expand_dims(time_attention, axis=1)
 
-    next_step_input, _ = encoder(next_step_input, concept_mask, time_attention)
+    next_step_input, _ = encoder(next_step_input, concept_mask, None)
 
     concept_predictions = softmax_layer(
         output_layer([next_step_input, embedding_matrix]))
