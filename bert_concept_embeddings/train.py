@@ -19,10 +19,10 @@ CONFIDENCE_PENALTY = 0.1
 BERT_SPECIAL_TOKENS = ['[MASK]', '[UNUSED]']
 MAX_LEN = 100
 TIME_WINDOW = 100
-BATCH_SIZE = 512
+BATCH_SIZE = 256
 LEARNING_RATE = 2e-4
 CONCEPT_EMBEDDING = 128
-EPOCH = 20
+EPOCH = 10
 
 
 def compile_new_model():
@@ -46,12 +46,12 @@ def compile_new_model():
 
 
 # +
-input_folder = '/data/research_ops/omops/ohdsi_covid/output'
-output_folder = '/data/research_ops/omops/ohdsi_covid/bert'
+data_folder = '/data/research_ops/omops/omop_2020q1/output'
+bert_model_folder = '/data/research_ops/omops/omop_2020q1/bert'
 
-training_data_path = os.path.join(input_folder, 'patient_event_sequence.pickle')
-tokenizer_output_path = os.path.join(output_folder, 'tokenizer.pickle')
-model_output_path = os.path.join(output_folder, 'model_time_aware_embeddings.h5')
+training_data_path = os.path.join(data_folder, 'patient_event_sequence.pickle')
+tokenizer_path = os.path.join(data_folder, 'tokenizer.pickle')
+bert_model_path = os.path.join(bert_model_folder, 'model_time_aware_embeddings.h5')
 # -
 
 training_data = pd.read_pickle(training_data_path)
@@ -60,7 +60,7 @@ tokenizer = ConceptTokenizer()
 tokenizer.fit_on_concept_sequences(training_data.concept_ids)
 encoded_sequences = tokenizer.encode(training_data.concept_ids)
 training_data['token_ids'] = encoded_sequences
-pickle.dump(tokenizer, open(tokenizer_output_path, 'wb'))
+pickle.dump(tokenizer, open(tokenizer_path, 'wb'))
 
 data_generator = BertBatchGenerator(patient_event_sequence=training_data,
                                     mask_token_id=tokenizer.get_mask_token_id(),
@@ -74,15 +74,13 @@ dataset = tf.data.Dataset.from_generator(data_generator.batch_generator,
                                          output_types=({'masked_concept_ids': tf.int32,
                                                         'concept_ids': tf.int32,
                                                         'time_stamps': tf.int32,
+                                                        'visit_orders': tf.int32,
                                                         'mask': tf.int32}, tf.int32))
-
-dataset = dataset.take(data_generator.get_steps_per_epoch()).cache().repeat()
-dataset = dataset.shuffle(5).prefetch(tf.data.experimental.AUTOTUNE)
 
 strategy = tf.distribute.MirroredStrategy()
 print('Number of devices: {}'.format(strategy.num_replicas_in_sync))
 with strategy.scope():
-    if os.path.exists(model_output_path):
+    if os.path.exists(bert_model_path):
         model = tf.keras.models.load_model(model_output_path, custom_objects=get_custom_objects())
     else:
         model = compile_new_model()
@@ -94,7 +92,7 @@ lr_scheduler = callbacks.LearningRateScheduler(
 
 model_callbacks = [
     callbacks.ModelCheckpoint(
-        filepath=model_output_path,
+        filepath=bert_model_path,
         save_best_only=True,
         verbose=1),
     lr_scheduler,
@@ -108,3 +106,5 @@ model.fit(
     validation_data=dataset.shard(10, 1),
     validation_steps=10,
 )
+
+

@@ -96,7 +96,8 @@ def time_attention_cbow_model(max_seq_length: int,
     time_embedding_layer = TimeAttention(vocab_size=vocabulary_size,
                                          target_seq_len=1,
                                          context_seq_len=max_seq_length,
-                                         time_window_size=time_window_size)
+                                         time_window_size=time_window_size, 
+                                         trainable=True)
 
     dense_layer = tf.keras.layers.Dense(vocabulary_size)
 
@@ -219,3 +220,4 @@ def transformer_bert_model(
         outputs=[concept_predictions])
 
     return model
+

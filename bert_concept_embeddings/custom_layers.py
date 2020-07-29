@@ -194,7 +194,10 @@ class Encoder(tf.keras.layers.Layer):
     def call(self, x, mask, time_attention_logits, **kwargs):
         attention_weights = []
         for i in range(self.num_layers):
-            x, attn_weights = self.enc_layers[i](x, mask, time_attention_logits, **kwargs)
+            if i == 0:
+                x, attn_weights = self.enc_layers[i](x, mask, time_attention_logits, **kwargs)
+            else:
+                x, attn_weights = self.enc_layers[i](x, mask, None, **kwargs)
             attention_weights.append(attn_weights)
         return x, tf.stack(attention_weights, axis=0)  # (batch_size, input_seq_len, d_model)
 

@@ -174,12 +174,12 @@ def main(args):
     
     dataset = dataset.take(batch_generator.get_steps_per_epoch()).cache().repeat()
     dataset = dataset.shuffle(5).prefetch(tf.data.experimental.AUTOTUNE)
-    dataset = dataset.map(lambda inputs, label: random_mutate_time_stamps(inputs, 
-                                                                          label, 
-                                                                          args.batch_size, 
-                                                                          args.max_seq_length,
-                                                                          5, 2.0),
-                          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+#     dataset = dataset.map(lambda inputs, label: random_mutate_time_stamps(inputs, 
+#                                                                           label, 
+#                                                                           args.batch_size, 
+#                                                                           args.max_seq_length,
+#                                                                           1, 1.0),
+#                           num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     train(model_path=model_path,
           dataset=dataset,

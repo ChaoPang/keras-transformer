@@ -139,7 +139,7 @@ class BatchGenerator:
         return False, None, None
 
     def qualified_indexes(self, date, time_stamp_sequence):
-        half_time_window = self.half_time_window()
+        half_time_window = self.get_half_time_window()
         time_deltas = time_stamp_sequence - date
         qualified_indexes = np.squeeze(np.argwhere(
             (time_deltas >= -half_time_window) & (time_deltas <= half_time_window)), axis=-1)
@@ -152,8 +152,7 @@ class BatchGenerator:
         return left_index, right_index
 
     def get_half_time_window(self):
-        half_time_window = int(self.time_window_size / 2)
-        return half_time_window
+        return int(self.time_window_size / 2)
 
     def get_steps_per_epoch(self):
         return self.estimate_data_size() // self.batch_size
@@ -254,7 +253,8 @@ class BertBatchGenerator(BatchGenerator):
             *sorted(zip(tup.token_ids, tup.dates, tup.concept_id_visit_orders), key=lambda tup2: (tup2[1],
                                                                                                   tup2[2])))
         left_index, right_index = self.compute_index_bounds(i)
-
+        right_index -= 1
+        
         sequence = np.asarray(concept_ids[left_index: right_index])
         time_stamp_sequence = np.asarray(dates[left_index: right_index])
         visit_order_sequence = np.asarray(concept_id_visit_orders[left_index: right_index])
