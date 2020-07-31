@@ -29,7 +29,7 @@ def compile_new_model():
     optimizer = optimizers.Adam(
         lr=LEARNING_RATE, beta_1=0.9, beta_2=0.999)
 
-    _model = transformer_bert_model(
+    _model = transformer_temporal_bert_model(
         max_seq_length=MAX_LEN,
         time_window_size=TIME_WINDOW,
         vocabulary_size=len(tokenizer.tokenizer.index_word) + 1,
