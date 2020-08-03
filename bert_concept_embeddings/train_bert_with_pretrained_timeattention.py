@@ -78,6 +78,7 @@ dataset = tf.data.Dataset.from_generator(data_generator.batch_generator,
                                                         'concept_ids': tf.int32,
                                                         'time_stamps': tf.int32,
                                                         'visit_orders': tf.int32,
+                                                        'concept_positions': tf.int32,
                                                         'mask': tf.int32}, tf.int32))
 
 another_strategy = tf.distribute.OneDeviceStrategy("/cpu:0")
@@ -119,5 +120,3 @@ model.fit(
     validation_data=dataset.shard(10, 1),
     validation_steps=10,
 )
-
-
