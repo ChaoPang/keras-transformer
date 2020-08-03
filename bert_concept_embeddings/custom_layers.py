@@ -388,6 +388,7 @@ get_custom_objects().update({
     'MultiHeadAttention': MultiHeadAttention,
     'Encoder': Encoder,
     'EncoderLayer': EncoderLayer,
+    'TemporalEncoder': TemporalEncoder,
     'TimeAttention': TimeAttention,
     'TimeSelfAttention': TimeSelfAttention,
     'PairwiseTimeAttention': TimeSelfAttention,
