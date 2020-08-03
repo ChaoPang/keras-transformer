@@ -154,7 +154,7 @@ def transformer_bert_model(
 
     concept_ids = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='concept_ids')
 
-    concept_positions = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='concept_positions')
+    visit_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='visit_orders')
 
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
 
@@ -191,7 +191,7 @@ def transformer_bert_model(
 
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
-    next_step_input = visit_embedding_layer([concept_positions, next_step_input])
+    next_step_input = visit_embedding_layer([visit_orders, next_step_input])
 
     next_step_input, _ = encoder(next_step_input, concept_mask, None)
 
@@ -199,7 +199,7 @@ def transformer_bert_model(
         output_layer([next_step_input, embedding_matrix]))
 
     model = tf.keras.Model(
-        inputs=[masked_concept_ids, concept_ids, concept_positions, mask],
+        inputs=[masked_concept_ids, concept_ids, visit_orders, mask],
         outputs=[concept_predictions])
 
     return model
@@ -234,7 +234,7 @@ def transformer_temporal_bert_model(
 
     time_stamps = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='time_stamps')
 
-    concept_positions = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='concept_positions')
+    visit_orders = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='visit_orders')
 
     mask = tf.keras.layers.Input(shape=(max_seq_length,), dtype='int32', name='mask')
 
@@ -279,7 +279,7 @@ def transformer_temporal_bert_model(
 
     # Building a Vanilla Transformer (described in
     # "Attention is all you need", 2017)
-    next_step_input = visit_embedding_layer([concept_positions, next_step_input])
+    next_step_input = visit_embedding_layer([visit_orders, next_step_input])
     # shape = (batch_size, seq_len, seq_len)
     time_attention = time_attention_layer([concept_ids, time_stamps, mask])
     # pad a dimension to accommodate the head split
@@ -291,7 +291,7 @@ def transformer_temporal_bert_model(
         output_layer([next_step_input, embedding_matrix]))
 
     model = tf.keras.Model(
-        inputs=[masked_concept_ids, concept_ids, time_stamps, concept_positions, mask],
+        inputs=[masked_concept_ids, concept_ids, time_stamps, visit_orders, mask],
         outputs=[concept_predictions])
 
     return model
