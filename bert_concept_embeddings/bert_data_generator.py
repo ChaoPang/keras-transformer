@@ -275,7 +275,7 @@ class BertBatchGenerator(BatchGenerator):
             concept_position_sequence = concept_position_sequence[qualified_indexes]
             return True, sequence, time_stamp_sequence, visit_order_sequence, concept_position_sequence
 
-        return False, None, None, None
+        return False, None, None, None, None
 
     def data_generator(self):
 
