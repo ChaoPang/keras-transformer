@@ -37,7 +37,7 @@ class Trainer:
         self.tf_board_log_path = tf_board_log_path
 
         self.raw_input_data_path = os.path.join(self.input_folder, 'visit_event_sequence_v2')
-        self.training_data_path = os.path.join(self.output_folder, 'patient_event_sequence.pickle')
+        self.training_data_path = os.path.join(self.input_folder, 'patient_event_sequence.pickle')
         self.tokenizer_path = os.path.join(self.output_folder, 'tokenizer.pickle')
         self.model_path = os.path.join(self.output_folder, 'model_time_aware_embeddings.h5')
 
@@ -97,7 +97,10 @@ class Trainer:
             event_dates = visit_concepts.sort_values(['person_id', 'visit_rank_order']) \
                 .groupby('person_id')['dates'].apply(lambda x: list(itertools.chain(*x))).reset_index()
 
-            training_data = patient_concept_ids.merge(patient_visit_ids).merge(event_dates)
+            concept_positions = visit_concepts.sort_values(['person_id', 'visit_rank_order']) \
+                .groupby('person_id')['concept_positions'].apply(lambda x: list(itertools.chain(*x))).reset_index()
+
+            training_data = patient_concept_ids.merge(patient_visit_ids).merge(event_dates).merge(concept_positions)
             training_data = training_data[training_data['concept_ids'].apply(len) > 1]
             training_data.to_pickle(self.training_data_path)
 
@@ -105,6 +108,8 @@ class Trainer:
 
     def tokenize_concept_sequences(self, training_data):
         """
+
+        :param training_data:
         :return:
         """
         tokenizer = ConceptTokenizer()
@@ -116,6 +121,12 @@ class Trainer:
 
     def train(self, vocabulary_size, dataset, val_dataset, steps_per_epoch, val_steps_per_epoch):
         """
+
+        :param vocabulary_size:
+        :param dataset:
+        :param val_dataset:
+        :param steps_per_epoch:
+        :param val_steps_per_epoch:
         :return:
         """
         strategy = tf.distribute.MirroredStrategy()
@@ -174,7 +185,7 @@ def main(args):
     trainer.run()
 
 
-def parse_args():
+def create_parse_args():
     parser = argparse.ArgumentParser(description='Arguments for concept embedding model')
     parser.add_argument('-i',
                         '--input_folder',
@@ -236,8 +247,8 @@ def parse_args():
                         action='store',
                         default='./logs',
                         required=False)
-    return parser.parse_args()
+    return parser
 
 
 if __name__ == "__main__":
-    main(parse_args())
+    main(create_parse_args().parse_args())
