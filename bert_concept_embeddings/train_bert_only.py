@@ -20,6 +20,8 @@ class BertTrainer(Trainer):
                  concept_embedding_size,
                  max_seq_length,
                  time_window_size,
+                 depth,
+                 num_heads,
                  batch_size,
                  epochs,
                  learning_rate,
@@ -34,6 +36,8 @@ class BertTrainer(Trainer):
                                           epochs=epochs,
                                           learning_rate=learning_rate,
                                           tf_board_log_path=tf_board_log_path)
+        self.depth = depth
+        self.num_heads = num_heads
 
     def create_tf_dataset(self, tokenizer, training_data):
         data_generator = BertBatchGenerator(patient_event_sequence=training_data,
@@ -93,8 +97,8 @@ class BertTrainer(Trainer):
                     max_seq_length=self.max_seq_length,
                     vocabulary_size=vocabulary_size,
                     concept_embedding_size=self.concept_embedding_size,
-                    depth=5,
-                    num_heads=8)
+                    depth=self.depth,
+                    num_heads=self.num_heads)
 
                 model.compile(
                     optimizer,
@@ -103,12 +107,33 @@ class BertTrainer(Trainer):
         return model
 
 
+def create_parse_args_base_bert():
+    parser = create_parse_args()
+
+    parser.add_argument('-d',
+                        '--depth',
+                        dest='depth',
+                        action='store',
+                        default=5,
+                        required=False)
+
+    parser.add_argument('-h',
+                        '--num_heads',
+                        dest='num_heads',
+                        action='store',
+                        default=8,
+                        required=False)
+    return parser
+
+
 def main(args):
     trainer = BertTrainer(input_folder=args.input_folder,
                           output_folder=args.output_folder,
                           concept_embedding_size=args.concept_embedding_size,
                           max_seq_length=args.max_seq_length,
                           time_window_size=args.time_window_size,
+                          depth=args.depth,
+                          num_head=args.num_heads,
                           batch_size=args.batch_size,
                           epochs=args.epochs,
                           learning_rate=args.learning_rate,
@@ -118,4 +143,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(create_parse_args().parse_args())
+    main(create_parse_args_base_bert().parse_args())
