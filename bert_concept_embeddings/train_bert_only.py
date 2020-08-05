@@ -95,7 +95,6 @@ class BertTrainer(Trainer):
 
         model = transformer_bert_model(
             max_seq_length=self.max_seq_length,
-            time_window_size=self.time_window_size,
             vocabulary_size=vocabulary_size,
             concept_embedding_size=self.concept_embedding_size,
             depth=5,

@@ -193,7 +193,7 @@ def transformer_bert_model(
     # "Attention is all you need", 2017)
     next_step_input = visit_embedding_layer([visit_orders, next_step_input])
 
-    next_step_input, _ = encoder(next_step_input, concept_mask, None)
+    next_step_input, _ = encoder(next_step_input, concept_mask)
 
     concept_predictions = softmax_layer(
         output_layer([next_step_input, embedding_matrix]))
