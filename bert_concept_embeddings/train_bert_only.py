@@ -86,25 +86,20 @@ class BertTrainer(Trainer):
             if os.path.exists(self.model_path):
                 model = tf.keras.models.load_model(self.model_path, custom_objects=get_custom_objects())
             else:
-                model = self.compile_new_model(vocabulary_size)
-        return model
+                optimizer = optimizers.Adam(
+                    lr=self.learning_rate, beta_1=0.9, beta_2=0.999)
 
-    def compile_new_model(self, vocabulary_size):
-        optimizer = optimizers.Adam(
-            lr=self.learning_rate, beta_1=0.9, beta_2=0.999)
+                model = transformer_bert_model(
+                    max_seq_length=self.max_seq_length,
+                    vocabulary_size=vocabulary_size,
+                    concept_embedding_size=self.concept_embedding_size,
+                    depth=5,
+                    num_heads=8)
 
-        model = transformer_bert_model(
-            max_seq_length=self.max_seq_length,
-            vocabulary_size=vocabulary_size,
-            concept_embedding_size=self.concept_embedding_size,
-            depth=5,
-            num_heads=8)
-
-        model.compile(
-            optimizer,
-            loss=MaskedPenalizedSparseCategoricalCrossentropy(self.confidence_penalty),
-            metrics={'concept_predictions': masked_perplexity})
-
+                model.compile(
+                    optimizer,
+                    loss=MaskedPenalizedSparseCategoricalCrossentropy(self.confidence_penalty),
+                    metrics={'concept_predictions': masked_perplexity})
         return model
 
 

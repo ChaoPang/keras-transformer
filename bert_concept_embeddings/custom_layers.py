@@ -206,8 +206,6 @@ class Encoder(tf.keras.layers.Layer):
         self.num_heads = num_heads
         self.dff = dff
         self.dropout_rate = dropout_rate
-        self.temporal_context_enc_layer = TemporalEncoderLayer(d_model, dff, dropout_rate,
-                                                               name='temporal_context_encoder')
         self.enc_layers = [
             EncoderLayer(d_model, num_heads, dff, dropout_rate, name='transformer' + str(i))
             for i in range(num_layers)]
