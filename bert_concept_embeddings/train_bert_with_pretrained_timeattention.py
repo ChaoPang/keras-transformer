@@ -79,7 +79,7 @@ def main(args):
                                   max_seq_length=args.max_seq_length,
                                   time_window_size=args.time_window_size,
                                   depth=args.depth,
-                                  num_head=args.num_heads,
+                                  num_heads=args.num_heads,
                                   batch_size=args.batch_size,
                                   epochs=args.epochs,
                                   learning_rate=args.learning_rate,
