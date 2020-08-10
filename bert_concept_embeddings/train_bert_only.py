@@ -117,7 +117,7 @@ def create_parse_args_base_bert():
                         default=5,
                         required=False)
 
-    parser.add_argument('-h',
+    parser.add_argument('-nh',
                         '--num_heads',
                         dest='num_heads',
                         action='store',
