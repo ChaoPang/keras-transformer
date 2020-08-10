@@ -227,8 +227,7 @@ class BertBatchGenerator(BatchGenerator):
         training_example_generator = self.data_generator()
         while True:
             next_bunch_of_examples = islice(training_example_generator, self.batch_size)
-            (output_mask, sequence, masked_sequence, time_stamp_sequence, visit_order_sequence,
-             concept_position_sequence) = zip(
+            output_mask, sequence, masked_sequence, time_stamp_sequence, visit_order_sequence = zip(
                 *list(next_bunch_of_examples))
 
             sequence = pad_sequences(np.asarray(sequence), maxlen=self.max_sequence_length, padding='post',
@@ -239,10 +238,6 @@ class BertBatchGenerator(BatchGenerator):
                                                 padding='post', value=0, dtype='int32')
             visit_order_sequence = pad_sequences(np.asarray(visit_order_sequence), maxlen=self.max_sequence_length,
                                                  padding='post', value=0, dtype='int32')
-            concept_position_sequence = pad_sequences(np.asarray(concept_position_sequence),
-                                                      maxlen=self.max_sequence_length,
-                                                      padding='post', value=0, dtype='int32')
-
             mask = (sequence == self.unused_token_id).astype(int)
             combined_label = np.stack([sequence, output_mask], axis=-1)
 
@@ -250,40 +245,35 @@ class BertBatchGenerator(BatchGenerator):
                     'concept_ids': sequence,
                     'time_stamps': time_stamp_sequence,
                     'visit_orders': visit_order_sequence,
-                    'concept_positions': concept_position_sequence,
                     'mask': mask}, combined_label)
 
     def extract_concepts_time_stamps(self, i, tup):
 
-        concept_ids, dates, concept_id_visit_orders, concept_positions = zip(
-            *sorted(zip(tup.token_ids, tup.dates, tup.concept_id_visit_orders, tup.concept_positions),
-                    key=lambda tup2: (tup2[1],
-                                      tup2[2])))
+        concept_ids, dates, concept_id_visit_orders = zip(
+            *sorted(zip(tup.token_ids, tup.dates, tup.concept_id_visit_orders), key=lambda tup2: (tup2[1],
+                                                                                                  tup2[2])))
         left_index, right_index = self.compute_index_bounds(i)
         right_index -= 1
 
         sequence = np.asarray(concept_ids[left_index: right_index])
         time_stamp_sequence = np.asarray(dates[left_index: right_index])
         visit_order_sequence = np.asarray(concept_id_visit_orders[left_index: right_index])
-        concept_position_sequence = np.asarray(concept_positions[left_index: right_index])
         qualified_indexes = self.qualified_indexes(dates[i], time_stamp_sequence)
 
         if len(qualified_indexes) > self.minimum_num_of_concepts:
             sequence = sequence[qualified_indexes]
             time_stamp_sequence = time_stamp_sequence[qualified_indexes]
             visit_order_sequence = visit_order_sequence[qualified_indexes]
-            concept_position_sequence = concept_position_sequence[qualified_indexes]
-            return True, sequence, time_stamp_sequence, visit_order_sequence, concept_position_sequence
+            return True, sequence, time_stamp_sequence, visit_order_sequence
 
-        return False, None, None, None, None
+        return False, None, None, None
 
     def data_generator(self):
 
         while True:
             for tup in self.patient_event_sequence.itertuples():
 
-                (is_qualified, sequence, time_stamp_sequence, visit_order_sequence,
-                 concept_position_sequence) = self.extract_concepts_time_stamps(
+                (is_qualified, sequence, time_stamp_sequence, visit_order_sequence) = self.extract_concepts_time_stamps(
                     random.randint(0, len(tup.concept_ids) - 1), tup)
 
                 if is_qualified:
@@ -304,8 +294,7 @@ class BertBatchGenerator(BatchGenerator):
                             # else: 10% of the time we just leave the word as is
                             output_mask[word_pos] = 1
 
-                    yield (output_mask, sequence, masked_sequence, time_stamp_sequence, visit_order_sequence,
-                           concept_position_sequence)
+                    yield (output_mask, sequence, masked_sequence, time_stamp_sequence, visit_order_sequence)
 
     def estimate_data_size(self):
         return len(self.patient_event_sequence)
